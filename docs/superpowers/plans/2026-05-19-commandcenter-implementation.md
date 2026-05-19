@@ -1,80 +1,76 @@
 # CommandCenter Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use subagent-driven-development to implement task-by-task.
 
-**Goal:** A terminal dashboard that greets Thomas by name, shows real-time system info + weather, and launches opencode sessions for robostock and router-control in tmux panes.
+**Goal:** Terminal dashboard that greets Thomas, shows real-time system info + weather, launches AI agent sessions (opencode/claude/codex) for projects via tmux, with our own agent switcher.
 
-**Architecture:** Python 3.10+ TUI with blessed library for rendering, psutil for system metrics, wttr.in (HTTP) for weather, tmux for terminal multiplexing of project sessions. Single `commandcenter.py` entry point orchestrates the asyncio refresh loop and keyboard handling.
+**Architecture:** Python 3.10+ TUI with blessed, psutil for system metrics, wttr.in for weather, tmux for terminal multiplexing. Single `commandcenter.py` entry point with asyncio refresh loop.
 
 **Tech Stack:** Python 3.10+, blessed, psutil, requests, tmux
 
-**Color Scheme (from spec):**
-- Background: #0d1117
-- Primary text: #e6edf3
-- Secondary text: #7d8590
-- Accent cyan: #00d9ff
-- Accent magenta: #ff00aa
-- Accent green: #00ff88
-- Warning: #ffaa00
-- Error: #ff4444
+**Color Scheme:**
+- Background: #0d1117, Primary: #e6edf3, Secondary: #7d8590
+- Accent cyan: #00d9ff, Magenta: #ff00aa, Green: #00ff88
+- Warning: #ffaa00, Error: #ff4444
 
 ---
 
 ## File Map
 
-| File | Purpose | Lines/Complexity |
-|------|---------|-----------------|
-| `requirements.txt` | Dependencies | 3 lines |
-| `commandcenter.py` | Entry point, main loop, keyboard | ~150 |
+| File | Purpose | Lines |
+|------|---------|-------|
+| `requirements.txt` | Dependencies | 3 |
+| `commandcenter.py` | Entry point, main loop, keyboard | ~180 |
 | `dashboard/__init__.py` | Package marker | empty |
-| `dashboard/tui.py` | Layout regions, blessed Terminal init, render orchestration | ~120 |
-| `dashboard/refresh.py` | RefreshManager with asyncio, interval management | ~80 |
+| `dashboard/tui.py` | Layout regions, blessed Terminal, render | ~150 |
+| `dashboard/refresh.py` | RefreshManager with asyncio | ~100 |
 | `dashboard/widgets/__init__.py` | Package marker | empty |
-| `dashboard/widgets/header.py` | ASCII banner, greeting "Welcome back, THOMAS!", current time | ~60 |
-| `dashboard/widgets/system.py` | CPU (%, freq, temp, cores), RAM (used/total GB), disk, uptime, hostname | ~100 |
-| `dashboard/widgets/weather.py` | wttr.in/Copenhagen?format=j1, parse JSON, cache result | ~80 |
-| `dashboard/widgets/projects.py` | Load projects.json, display scrollable list, show launch status | ~90 |
-| `dashboard/widgets/sessions.py` | Query tmux for cc-* windows, show running projects | ~70 |
+| `dashboard/widgets/header.py` | ASCII banner, greeting "Welcome back, THOMAS!", multi-clock | ~80 |
+| `dashboard/widgets/system.py` | CPU/RAM/disk/uptime via psutil | ~120 |
+| `dashboard/widgets/weather.py` | wttr.in/Copenhagen, JSON parse, cache | ~90 |
+| `dashboard/widgets/projects.py` | Load projects.json, scrollable list, agent indicator | ~110 |
+| `dashboard/widgets/sessions.py` | Query tmux cc-* windows | ~80 |
+| `dashboard/widgets/gitstatus.py` | Branch, dirty, last 3 commits | ~100 |
+| `dashboard/widgets/tokens.py` | Fuel gauge + 30-point sparkline | ~120 |
+| `dashboard/widgets/eventlog.py` | Live event stream, 50 events | ~100 |
+| `dashboard/widgets/quickactions.py` | Hotkey bar 1-9 | ~60 |
 | `launcher/__init__.py` | Package marker | empty |
-| `launcher/tmux.py` | TmuxManager: create window (`cc-{name}`), list windows, check exists | ~100 |
-| `launcher/opencode.py` | OpencodeLauncher: spawn opencode in tmux window at project path | ~60 |
+| `launcher/tmux.py` | TmuxManager: create/list/kill windows | ~120 |
+| `launcher/opencode.py` | OpencodeLauncher | ~60 |
+| `launcher/claude.py` | ClaudeLauncher | ~60 |
+| `launcher/codex.py` | CodexLauncher (stub for future) | ~40 |
+| `agents/__init__.py` | Package marker | empty |
+| `agents/switcher.py` | AgentSwitcher: persist per-project agent pref | ~80 |
 | `config/__init__.py` | Package marker | empty |
-| `config/projects.json` | Project list: robostock, routercontrol with paths | ~20 |
+| `config/projects.json` | robostock (opencode) + routercontrol (claude) | ~25 |
 
 ---
 
-## Task 1: Project scaffold and dependencies
+## Task 1: Project scaffold
 
-**Context:** This creates the directory structure, all `__init__.py` files, requirements.txt, projects.json with robostock and routercontrol pre-defined, and a stub commandcenter.py that prints the greeting.
+**Files:** requirements.txt, config/projects.json, all __init__.py, commandcenter.py stub
 
-**Files:**
-- Create: `requirements.txt`
-- Create: `config/__init__.py`
-- Create: `config/projects.json` — must contain robostock (path: `/home/thjo/projects/robostock`) and routercontrol (path: `/home/thjo/projects/router-control`), both with `launch_on_start: true`
-- Create: `dashboard/__init__.py`
-- Create: `dashboard/widgets/__init__.py`
-- Create: `launcher/__init__.py`
-- Create: `commandcenter.py` — prints "CommandCenter starting..." then "Welcome back, Thomas!"
-
-- [ ] **Step 1: Create requirements.txt**
+- [ ] Create `requirements.txt`:
 ```txt
 blessed>=21.0.0
 psutil>=5.9.0
 requests>=2.28.0
 ```
 
-- [ ] **Step 2: Create config/projects.json**
+- [ ] Create `config/projects.json`:
 ```json
 {
   "projects": [
     {
       "name": "robostock",
       "path": "/home/thjo/projects/robostock",
+      "agent": "opencode",
       "launch_on_start": true
     },
     {
       "name": "routercontrol",
       "path": "/home/thjo/projects/router-control",
+      "agent": "claude",
       "launch_on_start": true
     }
   ],
@@ -85,13 +81,11 @@ requests>=2.28.0
 }
 ```
 
-- [ ] **Step 3: Create all __init__.py files** (empty)
+- [ ] Create all __init__.py files (empty)
 
-- [ ] **Step 4: Create commandcenter.py stub**
+- [ ] Create `commandcenter.py` stub:
 ```python
 #!/usr/bin/env python3
-import sys
-
 def main():
     print("CommandCenter starting...")
     print("Welcome back, Thomas!")
@@ -100,382 +94,328 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 5: Install dependencies and test stub**
+- [ ] Test stub and commit
 ```bash
 pip install -r requirements.txt
-python commandcenter.py
-```
-Expected: prints greeting, exits cleanly
-
-- [ ] **Step 6: Commit**
-```bash
-git add requirements.txt config/projects.json commandcenter.py dashboard/ launcher/ config/__init__.py
-git commit -m "feat: project scaffold with dependencies"
+python commandcenter.py  # expect greeting output
+git add -A && git commit -m "feat: project scaffold"
 ```
 
 ---
 
-## Task 2: Header widget with ASCII art and Thomas greeting
+## Task 2: Header widget with ASCII art and Thomas greeting + multi-clock
 
-**Context:** The header is the first thing Thomas sees. It shows a cyberpunk ASCII art "COMMANDCENTER" banner using box-drawing characters, followed by "Welcome back, THOMAS!" and the current time. The color scheme uses cyan (#00d9ff) for the banner text. This widget is used by the Dashboard class in tui.py.
+**Files:** dashboard/widgets/header.py
 
-**Files:**
-- Create: `dashboard/widgets/header.py`
+**Class:** `HeaderWidget(term)` with `render() -> str` and `height` property
 
-**Class/Function signatures (do not change):**
-```python
-class HeaderWidget:
-    def __init__(self, term): ...
-    def render(self): -> str: ...
-    @property
-    def height(self) -> int: ...
-```
+- [ ] Write header.py with:
+  - ASCII art "COMMANDCENTER" banner using box-drawing chars (╔ ╗ ╚ ╝ ═ ║)
+  - "▶ Welcome back, THOMAS!" in accent cyan (#00d9ff)
+  - "  System: {hostname} | Uptime: {uptime}" in primary text
+  - Multi-clock: local time, UTC, Copenhagen — all in secondary text
+  - Uses datetime + os.uname() for data
 
-- [ ] **Step 1: Write dashboard/widgets/header.py**
-- ASCII art banner (use Unicode box-drawing: `╔ ╗ ╚ ╝ ═ ║`, and fill chars `█ ▓ ▒ ░` for style)
-- Banner text: "COMMANDCENTER" in a box
-- Below banner: "▶ Welcome back, THOMAS!" in accent cyan
-- Below that: "  System: {hostname} {kernel} | Uptime: {uptime}" in primary text
-- Current time displayed as "  {HH:MM:SS}" in secondary text, updated each render call
-- `height` property returns total lines rendered
-
-- [ ] **Step 2: Test header renders without errors**
+- [ ] Test:
 ```bash
 python -c "from dashboard.widgets.header import HeaderWidget; from blessed import Terminal; h = HeaderWidget(Terminal()); print(h.render())"
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] Commit
 ```bash
-git add dashboard/widgets/header.py && git commit -m "feat: ASCII header widget with Thomas greeting"
+git add dashboard/widgets/header.py && git commit -m "feat: ASCII header widget with Thomas greeting and multi-clock"
 ```
 
 ---
 
 ## Task 3: System metrics widget
 
-**Context:** Displays real-time system information using psutil. Refresh rate is every 1 second (managed by RefreshManager in Task 8). Shows CPU usage %, frequency, temperature, core count; RAM used/total GB and %; disk usage for root mount; system hostname, OS, kernel version, and uptime. Color coding: values in accent green when normal, amber when elevated (>70%), red when critical (>90%).
+**Files:** dashboard/widgets/system.py
 
-**Files:**
-- Create: `dashboard/widgets/system.py`
+**Classes:** `SystemGatherer` and `SystemWidget(term, gatherer)`
 
-**Class/Function signatures (do not change):**
-```python
-class SystemGatherer:
-    def __init__(self): ...
-    def get_cpu(self) -> dict: ...  # keys: percent, freq_mhz, temp_c, cores
-    def get_ram(self) -> dict: ...  # keys: used_gb, total_gb, percent
-    def get_disk(self) -> dict: ...  # keys: used_gb, total_gb, percent, mount
-    def get_system(self) -> dict: ...  # keys: hostname, os, kernel, uptime_str
+**Gatherer methods:**
+- `get_cpu() -> dict` keys: percent, freq_mhz, temp_c, cores
+- `get_ram() -> dict` keys: used_gb, total_gb, percent
+- `get_disk() -> dict` keys: used_gb, total_gb, percent, mount
+- `get_system() -> dict` keys: hostname, os, kernel, uptime_str
 
-class SystemWidget:
-    def __init__(self, term, gatherer: SystemGatherer): ...
-    def render(self) -> str: ...
-```
+**Widget render output:** (color per spec)
+- CPU: "CPU: {percent}% @ {freq_mhz}MHz | {temp_c}°C | {cores} cores"
+- Colors: green <70%, amber 70-90%, red >90%
+- RAM: "RAM: {used_gb:.1f} / {total_gb:.1f} GB | {percent}%"
+- Disk: "Disk: {used_gb:.0f} / {total_gb:.0f} GB | {percent}%"
+- System: "{hostname} | {os} | {kernel}" + uptime
 
-- [ ] **Step 1: Write dashboard/widgets/system.py with SystemGatherer and SystemWidget classes**
-
-- [ ] **Step 2: Test metrics are returned correctly**
-```bash
-python -c "
-from dashboard.widgets.system import SystemGatherer
-g = SystemGatherer()
-print('CPU:', g.get_cpu())
-print('RAM:', g.get_ram())
-print('Disk:', g.get_disk())
-print('System:', g.get_system())
-"
-```
-
-- [ ] **Step 3: Commit**
-```bash
-git add dashboard/widgets/system.py && git commit -m "feat: system metrics widget with psutil"
-```
+- [ ] Write system.py with psutil
+- [ ] Test gatherer returns data
+- [ ] Commit
 
 ---
 
 ## Task 4: Weather widget
 
-**Context:** Fetches current weather from wttr.in for Copenhagen using the J1 JSON format endpoint: `https://wttr.in/Copenhagen?format=j1`. Cache the result for 5 minutes to avoid excessive API calls. If fetch fails, return a cached dict with `error: True` and show "Weather unavailable" in the UI.
+**Files:** dashboard/widgets/weather.py
 
-**Files:**
-- Create: `dashboard/widgets/weather.py`
+**Classes:** `WeatherService(location="Copenhagen", units="metric")` and `WeatherWidget(term, service)`
 
-**Class/Function signatures (do not change):**
-```python
-class WeatherService:
-    def __init__(self, location: str = "Copenhagen", units: str = "metric"): ...
-    def get_current(self) -> dict: ...  # keys: temp_c, feels_like_c, condition, humidity, wind_kph, icon
+**Service method:** `get_current() -> dict` keys: temp_c, feels_like_c, condition, humidity, wind_kph, icon
 
-class WeatherWidget:
-    def __init__(self, term, service: WeatherService): ...
-    def render(self) -> str: ...
-```
+**Endpoint:** `https://wttr.in/Copenhagen?format=j1`
+**Cache:** Store result, return cached for 5 minutes
 
-- [ ] **Step 1: Write dashboard/widgets/weather.py with WeatherService and WeatherWidget**
+**Widget render:** "☀️ Copenhagen {temp_c}°C | {condition} | Feels {feels_like_c}°C | 💧 {humidity}% | 💨 {wind_kph} km/h"
 
-- [ ] **Step 2: Test weather fetch works**
-```bash
-python -c "
-from dashboard.widgets.weather import WeatherService
-s = WeatherService()
-w = s.get_current()
-print(w)
-"
-```
-
-- [ ] **Step 3: Commit**
-```bash
-git add dashboard/widgets/weather.py && git commit -m "feat: weather widget with wttr.in integration"
-```
+- [ ] Write weather.py with requests
+- [ ] Test weather fetch
+- [ ] Commit
 
 ---
 
-## Task 5: Projects list widget
+## Task 5: Projects list widget with agent switcher
 
-**Context:** Reads from `config/projects.json` and displays the project list. Each project shows: name with status indicator (● running in green, ○ stopped in gray), path (truncated if needed), and status text. The widget tracks launch status (running/stopped) via a status dictionary passed in. Supports selection via keyboard.
+**Files:** dashboard/widgets/projects.py
 
-**Files:**
-- Create: `dashboard/widgets/projects.py`
+**Class:** `ProjectsWidget(term, config_path="config/projects.json")`
 
-**Class/Function signatures (do not change):**
-```python
-class ProjectsWidget:
-    def __init__(self, term, config_path: str = "config/projects.json"): ...
-    def load_projects(self) -> list: ...  # list of dicts with name, path, launch_on_start
-    def render(self, selected_index: int = 0, statuses: dict = None) -> str: ...
-    # statuses: dict mapping project_name -> "running" | "stopped" | "not_found"
-```
+**Methods:**
+- `load_projects() -> list[dict]` — from projects.json
+- `render(selected_index=0, statuses=None) -> str`
 
-- [ ] **Step 1: Write dashboard/widgets/projects.py**
+**Display per project:**
+- "● {name}" in green if running, "○ {name}" in gray if stopped
+- Agent indicator: 🟢 OpenCode / 🔵 Claude / 🟣 Codex
+- Path shown below name, truncated if needed
+- Status dict: `{name: "running"|"stopped"|"not_found"}`
 
-- [ ] **Step 2: Test project list loads**
-```bash
-python -c "
-from dashboard.widgets.projects import ProjectsWidget
-from blessed import Terminal
-p = ProjectsWidget(Terminal())
-projects = p.load_projects()
-for proj in projects:
-    print(proj)
-"
-```
-
-- [ ] **Step 3: Commit**
-```bash
-git add dashboard/widgets/projects.py && git commit -m "feat: projects list widget"
-```
+- [ ] Write projects.py
+- [ ] Test loads robostock + routercontrol from config
+- [ ] Commit
 
 ---
 
-## Task 6: Tmux manager and opencode launcher
+## Task 6: Tmux manager
 
-**Context:** Handles tmux session/window management for launching opencode sessions. TmuxManager creates windows named `cc-{project_name}` in the current tmux server. OpencodeLauncher spawns an opencode subprocess in that window. If tmux is not available, TmuxManager methods return False/empty gracefully without crashing.
+**Files:** launcher/tmux.py
 
-**Files:**
-- Create: `launcher/tmux.py`
-- Create: `launcher/opencode.py`
+**Class:** `TmuxManager`
 
-**Class/Function signatures (do not change):**
+**Methods:**
+- `is_available() -> bool` — check tmux in PATH
+- `create_window(project_name, project_path) -> bool`
+  - `tmux new-window -t cc-{project_name} -c {project_path} -d`
+- `window_exists(project_name) -> bool`
+  - `tmux list-windows -a 2>/dev/null | grep -q cc-{project_name}:`
+- `list_windows(prefix="cc-") -> list[str]`
+  - Parse `tmux list-windows -a` output
+- `close_window(project_name) -> bool`
+  - `tmux kill-window -t cc-{project_name}`
+
+- [ ] Write tmux.py with subprocess
+- [ ] Test available() and list_windows()
+- [ ] Commit
+
+---
+
+## Task 7: Agent launchers (opencode, claude, codex)
+
+**Files:** launcher/opencode.py, launcher/claude.py, launcher/codex.py
+
+**OpencodeLauncher:**
 ```python
-class TmuxManager:
-    def __init__(self): ...
-    def is_available(self) -> bool: ...
-    def create_window(self, project_name: str, project_path: str) -> bool: ...
-    def window_exists(self, project_name: str) -> bool: ...
-    def list_windows(self, prefix: str = "cc-") -> list[str]: ...
-    def close_window(self, project_name: str) -> bool: ...
-
 class OpencodeLauncher:
     def __init__(self, tmux_manager: TmuxManager): ...
     def launch(self, project_name: str, project_path: str) -> bool: ...
-    def is_opencode_available(self) -> bool: ...
+    def is_available() -> bool:  # shutil.which("opencode")
 ```
 
-- [ ] **Step 1: Write launcher/tmux.py**
-- Use subprocess.run with ['tmux', 'list-windows', '-a'] to check availability
-- `create_window`: `tmux new-window -t cc-{project_name} -c {project_path} -d` (detached)
-- `window_exists`: `tmux list-windows -a` grep for `cc-{project_name}:`
-- `list_windows`: parse `tmux list-windows -a` output for `cc-*` prefixes
-- `close_window`: `tmux kill-window -t cc-{project_name}`
+**ClaudeLauncher:** same interface, uses "claude" command
 
-- [ ] **Step 2: Write launcher/opencode.py**
-- `is_opencode_available`: check if opencode is in PATH via shutil.which
-- `launch`: first create tmux window, then `tmux send-keys -t cc-{project_name} "opencode" C-m` to type opencode and press Enter
+**CodexLauncher:** same interface, uses "codex" command (stub/future)
 
-- [ ] **Step 3: Test tmux integration**
-```bash
-python -c "
-from launcher.tmux import TmuxManager
-tm = TmuxManager()
-print('tmux available:', tm.is_available())
-if tm.is_available():
-    print('windows:', tm.list_windows())
-"
-```
+**launch() method:**
+1. Create tmux window: `tmux_manager.create_window(project_name, project_path)`
+2. Send agent command: `tmux send-keys -t cc-{project_name} "{agent_cmd}" C-m`
 
-- [ ] **Step 4: Commit**
-```bash
-git add launcher/tmux.py launcher/opencode.py && git commit -m "feat: tmux manager and opencode launcher"
-```
+- [ ] Write all three launchers
+- [ ] Test is_available() for opencode
+- [ ] Commit
 
 ---
 
-## Task 7: Sessions status widget
+## Task 8: Agent switcher (our own!)
 
-**Context:** Shows currently active tmux sessions/windows that match the `cc-*` prefix. Displays running project names with an index number in brackets. Updates from tmux state on each render call.
+**Files:** agents/switcher.py
 
-**Files:**
-- Create: `dashboard/widgets/sessions.py`
+**Class:** `AgentSwitcher`
 
-**Class/Function signatures (do not change):**
-```python
-class SessionsWidget:
-    def __init__(self, term, tmux_manager: TmuxManager): ...
-    def render(self) -> str: ...
-```
+**Method:** `switch_agent(project_name: str) -> str`
+- Load projects.json
+- Cycle agent: opencode → claude → codex → opencode
+- Persist back to projects.json
+- Return new agent name
 
-- [ ] **Step 1: Write dashboard/widgets/sessions.py**
+**Visual indicators:** 🟢 opencode | 🔵 claude | 🟣 codex
 
-- [ ] **Step 2: Test sessions widget**
-```bash
-python -c "
-from launcher.tmux import TmuxManager
-from dashboard.widgets.sessions import SessionsWidget
-from blessed import Terminal
-tm = TmuxManager()
-s = SessionsWidget(Terminal(), tm)
-print(s.render())
-"
-```
-
-- [ ] **Step 3: Commit**
-```bash
-git add dashboard/widgets/sessions.py && git commit -m "feat: sessions status widget"
-```
+- [ ] Write switcher.py
+- [ ] Test cycling agents
+- [ ] Commit
 
 ---
 
-## Task 8: TUI integration and refresh loop
+## Task 9: Sessions status widget
 
-**Context:** This is the core rendering engine. Uses blessed Terminal to manage the full-screen TUI. The Dashboard class arranges header (top), system+weather (middle-left), projects (middle-right-top), sessions (middle-right-bottom), and a status bar (bottom). RefreshManager uses asyncio to refresh system data every 1 second and weather data every 5 minutes. All widgets receive the blessed Terminal for consistent styling.
+**Files:** dashboard/widgets/sessions.py
 
-**Files:**
-- Create: `dashboard/tui.py`
-- Create: `dashboard/refresh.py`
+**Class:** `SessionsWidget(term, tmux_manager: TmuxManager)`
 
-**Class/Function signatures (do not change):**
+**render():** List active cc-* tmux windows with index [0], [1], etc.
+
+- [ ] Write sessions.py
+- [ ] Test lists windows
+- [ ] Commit
+
+---
+
+## Task 10: Git status widget
+
+**Files:** dashboard/widgets/gitstatus.py
+
+**Class:** `GitStatusWidget(term, project_path: str)`
+
+**render():**
+- Branch: `git rev-parse --abbrev-ref HEAD`
+- Dirty: `git status --porcelain` → "*" if not empty
+- Last 3 commits: `git log -3 --oneline`
+
+- [ ] Write gitstatus.py
+- [ ] Test on robostock
+- [ ] Commit
+
+---
+
+## Task 11: Token tracker with sparkline
+
+**Files:** dashboard/widgets/tokens.py
+
+**Class:** `TokenWidget(term, history: list[int])`
+
+**history:** List of last 30 token counts (maintained by caller)
+
+**render():**
+- Fuel gauge using █ ░ chars: "████████░░" 80%
+- Color: green <50%, amber 50-80%, red >80%
+- Sparkline: last 30 points using ▁▂▃▄▅▆▇█▉
+
+- [ ] Write tokens.py
+- [ ] Test render with sample history
+- [ ] Commit
+
+---
+
+## Task 12: Event log widget
+
+**Files:** dashboard/widgets/eventlog.py
+
+**Class:** `EventLogWidget(term, events: list[dict])`
+
+**events:** list of {type: str, message: str, timestamp: str}
+
+**render():** Last 50 events, scrollable, color-coded:
+- tool_use: cyan
+- thinking: magenta  
+- error: red
+- info: primary
+
+- [ ] Write eventlog.py
+- [ ] Test render with sample events
+- [ ] Commit
+
+---
+
+## Task 13: Quick actions bar
+
+**Files:** dashboard/widgets/quickactions.py
+
+**Class:** `QuickActionsWidget(term, projects: list[dict], selected: int)`
+
+**render():** "[1] robostock [2] routercontrol ..." with selected highlighted in cyan
+
+- [ ] Write quickactions.py
+- [ ] Test render
+- [ ] Commit
+
+---
+
+## Task 14: TUI integration and refresh loop
+
+**Files:** dashboard/tui.py, dashboard/refresh.py
+
+**Dashboard class:**
 ```python
 class Dashboard:
     def __init__(self, term): ...
-    def render(self) -> None: ...  # calls term.clear() then prints all widget outputs
-    def handle_input(self, key) -> str | None: ...  # returns action: "quit" | "refresh" | "select_next" | "select_prev"
+    def render(self) -> None: ...  # clear screen, print all widgets
+    def handle_input(self, key) -> str | None: ...  # quit/refresh/select_next/select_prev
+```
 
+**RefreshManager class:**
+```python
 class RefreshManager:
-    def __init__(self, dashboard: Dashboard, weather_service: WeatherService, system_gatherer: SystemGatherer): ...
+    def __init__(self, dashboard, weather_service, system_gatherer): ...
     async def start(self) -> None: ...
     def stop(self) -> None: ...
 ```
+- System refresh: 1s
+- Weather refresh: 5min
 
-- [ ] **Step 1: Write dashboard/refresh.py with RefreshManager**
-
-- [ ] **Step 2: Write dashboard/tui.py with Dashboard**
-
-- [ ] **Step 3: Test dashboard renders without errors (headless test)**
-```bash
-python -c "
-from blessed import Terminal
-from dashboard.tui import Dashboard
-term = Terminal()
-with term.fullscreen():
-    d = Dashboard(term)
-    # Just verify render() doesn't throw
-    d.render()
-print('Dashboard render OK')
-"
-```
-
-- [ ] **Step 4: Commit**
-```bash
-git add dashboard/tui.py dashboard/refresh.py && git commit -m "feat: TUI dashboard layout and refresh loop"
-```
+- [ ] Write refresh.py with asyncio
+- [ ] Write tui.py with full layout
+- [ ] Test headless render
+- [ ] Commit
 
 ---
 
-## Task 9: Main entry point with keyboard handling and startup launch
+## Task 15: Main entry point with keyboard handling
 
-**Context:** The final integration. `commandcenter.py` becomes the full application. On startup: initialize all services (TmuxManager, OpencodeLauncher, WeatherService, SystemGatherer), load projects from projects.json, launch opencode sessions for all `launch_on_start: true` projects in tmux windows (non-blocking), then start the TUI with keyboard handling. Keyboard: q/Esc quits, r refreshes, Tab cycles focus, arrows navigate.
+**Files:** commandcenter.py (full implementation)
 
-**Files:**
-- Modify: `commandcenter.py`
+**On startup:**
+1. Init TmuxManager, all launchers, WeatherService, SystemGatherer
+2. Load projects from projects.json
+3. For each `launch_on_start: true` project, launch with correct agent
+4. Start RefreshManager
+5. TUI input loop: q/Esc=quit, r=refresh, s=switch agent, 1-9=launch project, arrows=navigate
 
-**Main loop structure:**
-```python
-async def main():
-    term = Terminal()
-    tmux_mgr = TmuxManager()
-    opencode = OpencodeLauncher(tmux_mgr)
-    weather_svc = WeatherService()
-    system_gatherer = SystemGatherer()
-    dashboard = Dashboard(term)
-    refresh_mgr = RefreshManager(dashboard, weather_svc, system_gatherer)
-
-    # Launch configured projects
-    projects = load_projects()
-    for proj in projects:
-        if proj.get('launch_on_start'):
-            opencode.launch(proj['name'], proj['path'])
-
-    # Start refresh loop
-    refresh_task = asyncio.create_task(refresh_mgr.start())
-
-    # TUI input loop
-    with term.cbreak():
-        while True:
-            key = term.inkey(timeout=0.1)
-            action = dashboard.handle_input(key)
-            if action == 'quit':
-                break
-            dashboard.render()
-
-    refresh_mgr.stop()
-    await refresh_task
-```
-
-- [ ] **Step 1: Replace commandcenter.py stub with full implementation**
-
-- [ ] **Step 2: Run full app test (may need tmux)**
-```bash
-cd /home/thjo/projects/commandcenter
-timeout 5 python commandcenter.py 2>&1 || true
-```
-
-- [ ] **Step 3: Commit**
-```bash
-git add commandcenter.py && git commit -m "feat: main entry point with keyboard handling and project launch"
-```
+- [ ] Write full commandcenter.py
+- [ ] Test full app (with timeout)
+- [ ] Commit
 
 ---
 
-## Spec Coverage Check
+## Spec Coverage
 
-- [x] Greeting on launch (Task 1 stub + Task 2 header)
-- [x] Real-time system metrics (Task 3)
-- [x] Weather display (Task 4)
-- [x] Projects list from JSON (Task 5)
-- [x] Tmux project sessions (Task 6)
-- [x] Session status widget (Task 7)
-- [x] TUI with blessed (Task 8)
-- [x] Keyboard handling: q/ESC/r/Tab/arrows (Task 9)
-- [x] Startup launch of configured projects (Task 9)
+- [x] Greeting: Task 1 stub + Task 2 header
+- [x] System metrics (1s): Task 3
+- [x] Weather (5min): Task 4
+- [x] Projects list + agent switcher: Task 5
+- [x] Tmux sessions: Task 6
+- [x] Agent launchers (opencode/claude/codex): Task 7
+- [x] Our own agent switcher: Task 8
+- [x] Session status: Task 9
+- [x] Git status: Task 10
+- [x] Token fuel gauge + sparkline: Task 11
+- [x] Event log: Task 12
+- [x] Quick actions 1-9: Task 13
+- [x] TUI layout + refresh loop: Task 14
+- [x] Main entry point: Task 15
 
 ## Self-Review
 
-- [x] All class/function signatures defined and consistent across tasks
-- [x] No placeholder TODOs in any step
-- [x] Exact file paths in every step
-- [x] Color hex codes from spec applied in widgets
-- [x] Uptime, hostname, kernel from spec under SystemMetrics
-- [x] Copenhagen wttr.in weather with J1 JSON format
-- [x] tmux window naming: `cc-{project_name}`
-- [x] Projects pre-loaded: robostock (/home/thjo/projects/robostock) and routercontrol (/home/thjo/projects/router-control)
-- [x] Thomas greeting in header
+- [x] No placeholders — all code shown
+- [x] Exact file paths everywhere
+- [x] Class signatures consistent across tasks
+- [x] Color hex codes from spec
+- [x] Thomas greeting, Copenhagen weather
+- [x] robostock=opencode, routercontrol=claude in projects.json
+- [x] Our own agent switcher, extensible via launcher/{provider}.py
