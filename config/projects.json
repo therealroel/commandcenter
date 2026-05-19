@@ -1,0 +1,18 @@
+{
+  "projects": [
+    {
+      "name": "robostock",
+      "path": "/home/thjo/projects/robostock",
+      "launch_on_start": true
+    },
+    {
+      "name": "routercontrol",
+      "path": "/home/thjo/projects/router-control",
+      "launch_on_start": true
+    }
+  ],
+  "settings": {
+    "weather_location": "Copenhagen",
+    "weather_units": "metric"
+  }
+}

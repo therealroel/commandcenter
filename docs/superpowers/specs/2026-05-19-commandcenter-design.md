@@ -64,12 +64,16 @@ It's not just a utility — it's **your cockpit**. Designed to feel alive, respo
 
 ### Components
 1. **Header Banner** — ASCII art "COMMANDCENTER" with neon glow effect
-2. **Greeting Bar** — Personalized welcome with user name (Thomas), system uptime
+2. **Greeting Bar** — Personalized welcome with user name (Thomas), system uptime, current time (local + UTC + Copenhagen)
 3. **System Metrics Panel** — Real-time CPU, RAM, disk, temperatures
 4. **Weather Widget** — Current conditions from wttr.in
-5. **Project List** — Scrollable list from projects.json
+5. **Project List** — Scrollable list from projects.json with agent switcher (OpenCode ↔ Claude Code per project)
 6. **Session Manager** — Shows active tmux sessions for projects
-7. **Status Bar** — Last refresh timestamp, connection status
+7. **Git Status Panel** — Branch, dirty state, recent commits per project
+8. **Token Tracker** — Real-time context/token usage per project
+9. **Live Event Log** — Stream of tool calls, decisions, agent actions
+10. **Quick Actions Bar** — Hotkeys 1-9 to jump to/launch projects
+11. **Status Bar** — Last refresh timestamp, connection status
 
 ---
 
@@ -84,19 +88,27 @@ commandcenter/
 │   ├── tui.py                # Blessed TUI render engine
 │   ├── widgets/
 │   │   ├── __init__.py
-│   │   ├── header.py        # ASCII banner + greeting
+│   │   ├── header.py        # ASCII banner + greeting + multi-clock
 │   │   ├── system.py        # CPU, RAM, disk metrics
 │   │   ├── weather.py       # wttr.in integration
-│   │   ├── projects.py      # Project list display
-│   │   └── sessions.py      # Tmux session status
+│   │   ├── projects.py      # Project list with agent switcher
+│   │   ├── sessions.py      # Tmux session status
+│   │   ├── gitstatus.py     # Branch, dirty, recent commits
+│   │   ├── tokens.py        # Token/context usage tracker
+│   │   ├── eventlog.py      # Live event stream
+│   │   └── quickactions.py  # Hotkey bar (1-9)
 │   └── refresh.py            # Data refresh loop
 ├── launcher/
 │   ├── __init__.py
 │   ├── tmux.py              # Tmux session/window management
-│   └── opencode.py          # Opencode process launcher
+│   ├── opencode.py          # Opencode process launcher
+│   └── claude.py            # Claude Code process launcher
 ├── config/
 │   ├── __init__.py
-│   └── projects.json        # Project definitions
+│   └── projects.json        # Project definitions with agent preference
+├── agents/
+│   ├── __init__.py
+│   └── switcher.py         # Switch between OpenCode and Claude per project
 ├── requirements.txt
 └── README.md
 ```
@@ -150,11 +162,13 @@ User input → CommandHandler → TmuxManager / App controller
     {
       "name": "robostock",
       "path": "/home/thjo/projects/robostock",
+      "agent": "opencode",
       "launch_on_start": true
     },
     {
       "name": "routercontrol",
       "path": "/home/thjo/projects/router-control",
+      "agent": "claude",
       "launch_on_start": true
     }
   ],
@@ -168,14 +182,45 @@ User input → CommandHandler → TmuxManager / App controller
 **F5: Tmux Project Sessions**
 - Each `launch_on_start: true` project gets a tmux window
 - Windows named after project: `cc-robostock`, `cc-routercontrol`
-- Launched with `opencode` command in project directory
+- Launched with `opencode` or `claude` command in project directory
 - Sessions displayed in dashboard with running status
+
+**F6: Agent Switcher**
+- Each project has a preferred agent: `opencode` or `claude`
+- Switch agent per project via hotkey or menu
+- Agent preference persisted in projects.json
+- Visual indicator shows current agent per project (🟢 OpenCode / 🔵 Claude)
+
+**F7: Git Status Panel**
+- Per-project: branch name, dirty state (*), recent commit (last 3)
+- Updates on project selection or manual refresh
+- Uses subprocess git commands
+
+**F8: Token/Context Tracker**
+- Per-project: context window usage %, token count
+- Color-coded fuel gauge: green (<50%), yellow (50-80%), red (>80%)
+- Shows per-request tokens and cumulative session total
+
+**F9: Live Event Log**
+- Streaming panel showing tool calls, decisions, agent actions
+- Color-coded by event type (tool use, thinking, error, etc.)
+- Last 50 events, scrollable
+- Filter by project or event type
+
+**F10: Quick Actions Bar**
+- Hotkeys 1-9 mapped to first 9 projects
+- Shows project index and name
+- Press number to launch/select that project
+- Current selection highlighted
 
 ### Interactions
 | Action | Behavior |
 |--------|----------|
 | `Enter` on project | Launch/opencode session in new tmux window |
+| `s` key on project | Switch agent (OpenCode ↔ Claude) for that project |
+| `1-9` keys | Quick-launch project by index |
 | `r` key | Refresh all data manually |
+| `g` key | Refresh git status for selected project |
 | `q` or `Esc` | Quit gracefully (kill sessions? confirm) |
 | `Tab` | Cycle focus between panels |
 | `↑/↓` | Navigate project list |
@@ -184,9 +229,12 @@ User input → CommandHandler → TmuxManager / App controller
 ### Edge Cases
 - **tmux not installed:** Show error, offer to install, disable session features
 - **opencode not found:** Warn but continue; show "opencode not in PATH" status
+- **claude not found:** If claude selected and not found, offer to switch to opencode
 - **Weather API fails:** Show "Weather unavailable" with last-known state
 - **Project path doesn't exist:** Mark as "PATH NOT FOUND" in red
 - **Project already running in tmux:** Don't duplicate; show "already running"
+- **Git repo not found:** Show "not a git repo" in project git panel
+- **Token API unavailable:** Show "token tracking unavailable" — doesn't crash
 
 ---
 
@@ -199,7 +247,7 @@ Main entry point. Initializes blessed Terminal, starts refresh loops, handles ke
 `Dashboard` class that manages layout regions (header, metrics, projects, sessions) and orchestrates rendering.
 
 ### dashboard/widgets/header.py
-`HeaderWidget` — ASCII art rendering, greeting text, current time display.
+`HeaderWidget` — ASCII art rendering, greeting text, current time display (local + UTC + Copenhagen).
 
 ### dashboard/widgets/system.py
 `SystemWidget` — Uses psutil to gather: CPU %, freq, temp, core count; RAM used/total; disk usage; uptime, hostname.
@@ -208,10 +256,22 @@ Main entry point. Initializes blessed Terminal, starts refresh loops, handles ke
 `WeatherWidget` — Fetches from `wttr.in/Copenhagen?format=j1`, parses JSON, caches result.
 
 ### dashboard/widgets/projects.py
-`ProjectsWidget` — Reads from projects.json, displays scrollable list, shows launch status.
+`ProjectsWidget` — Reads from projects.json, displays scrollable list, shows launch status, shows current agent per project (OpenCode/Claude indicator).
 
 ### dashboard/widgets/sessions.py
 `SessionsWidget` — Queries tmux for active sessions matching `cc-*` prefix, shows running projects.
+
+### dashboard/widgets/gitstatus.py
+`GitStatusWidget` — Shows branch, dirty state, and last 3 commits for selected project.
+
+### dashboard/widgets/tokens.py
+`TokenWidget` — Displays context/token usage per project with color-coded fuel gauge.
+
+### dashboard/widgets/eventlog.py
+`EventLogWidget` — Live event stream: tool calls, decisions, errors. Last 50 events, scrollable, filterable.
+
+### dashboard/widgets/quickactions.py
+`QuickActionsWidget` — Hotkey bar showing 1-9 project indices, current selection highlighted.
 
 ### dashboard/refresh.py
 `RefreshManager` — asyncio-based loop managing refresh intervals per data source.
@@ -220,10 +280,16 @@ Main entry point. Initializes blessed Terminal, starts refresh loops, handles ke
 `TmuxManager` — Creates/destroys tmux windows, lists sessions, checks if session exists.
 
 ### launcher/opencode.py
-`OpencodeLauncher` — Spawns `opencode` subprocess in specified directory within tmux window.
+`OpencodeLauncher` — Spawns opencode subprocess in specified directory within tmux window.
+
+### launcher/claude.py
+`ClaudeLauncher` — Spawns claude subprocess in specified directory within tmux window.
+
+### agents/switcher.py
+`AgentSwitcher` — Switch agent per project, persist preference to projects.json.
 
 ### config/projects.json
-Default project configuration with robostock and routercontrol pre-defined.
+Default project configuration with robostock and routercontrol pre-defined, agent field per project.
 
 ---
 
@@ -276,7 +342,7 @@ python commandcenter.py
 
 ### First-Launch Experience
 1. ASCII banner animates in
-2. "Welcome back, THJO!" greeting appears
+2. "Welcome back, THOMAS!" greeting appears
 3. System metrics start streaming in
 4. Weather fetches (may show "Loading..." briefly)
 5. Projects from projects.json load
@@ -288,11 +354,17 @@ python commandcenter.py
 ## 8. Success Criteria
 
 - [ ] Launches with `python commandcenter.py` and displays TUI immediately
-- [ ] Greeting shows user name (Thomas) prominently
+- [ ] Greeting shows user name (Thomas) prominently with multi-clock (local + UTC + Copenhagen)
 - [ ] System metrics update every second without flicker
 - [ ] Weather displays Copenhagen conditions with icon
 - [ ] Projects list shows robostock and routercontrol from projects.json
-- [ ] tmux sessions created with opencode running for each project
+- [ ] Agent switcher works per-project (OpenCode ↔ Claude Code)
+- [ ] `s` key toggles agent for selected project
+- [ ] tmux sessions created with correct agent (opencode or claude) for each project
+- [ ] Quick actions bar (1-9) launches correct project
+- [ ] Git status panel shows branch, dirty state, last 3 commits
+- [ ] Token tracker shows context usage with color-coded fuel gauge
+- [ ] Live event log streams tool calls and agent actions
 - [ ] Keyboard navigation works (arrow keys, Enter, q to quit)
 - [ ] Clean shutdown — tmux windows closed, no zombie processes
 - [ ] Runs on Linux (current platform)
