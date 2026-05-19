@@ -73,9 +73,7 @@ It's not just a utility — it's **your cockpit**. Designed to feel alive, respo
 8. **Token Tracker** — Real-time context/token usage per project with fuel gauge
 9. **Live Event Log** — Stream of tool calls, decisions, agent actions
 10. **Quick Actions Bar** — Hotkeys 1-9 to jump to/launch projects
-11. **Google Calendar Widget** — Next 3 upcoming meetings from Google Calendar
-12. **Email Widget** — Latest 3 unread emails from Gmail
-13. **Status Bar** — Last refresh timestamp, connection status
+11. **Status Bar** — Last refresh timestamp, connection status
 
 ---
 
@@ -98,9 +96,7 @@ commandcenter/
 │   │   ├── gitstatus.py     # Branch, dirty, recent commits
 │   │   ├── tokens.py        # Token/context usage tracker + sparkline
 │   │   ├── eventlog.py      # Live event stream
-│   │   ├── quickactions.py  # Hotkey bar (1-9)
-│   │   ├── calendar.py      # Google Calendar next 3 meetings
-│   │   └── email.py         # Gmail latest 3 unread
+│   │   └── quickactions.py  # Hotkey bar (1-9)
 │   └── refresh.py            # Data refresh loop
 ├── launcher/
 │   ├── __init__.py
@@ -114,10 +110,6 @@ commandcenter/
 ├── agents/
 │   ├── __init__.py
 │   └── switcher.py         # Switch agent per project, supports opencode/claude/codex
-├── services/
-│   ├── __init__.py
-│   ├── google_calendar.py  # Google Calendar API integration
-│   └── gmail.py            # Gmail API integration
 ├── requirements.txt
 └── README.md
 ```
@@ -225,22 +217,6 @@ User input → CommandHandler → TmuxManager / App controller
 - Press number to launch/select that project
 - Current selection highlighted
 
-**F11: Google Calendar Widget**
-- Shows next 3 upcoming meetings from Google Calendar
-- Displays: event title, time, attendee count
-- Current/upcoming event highlighted with 💥 icon
-- Conflict detection for overlapping events (🚨 icon)
-- Refreshes every 5 minutes
-- Requires Google OAuth setup (credentials file path in config)
-
-**F12: Email Widget**
-- Shows latest 3 unread emails from Gmail
-- Displays: sender name, subject preview, time received
-- Unread indicator (●) in blue
-- Click to open full email URL in browser
-- Refreshes every 2 minutes
-- Requires Gmail API OAuth setup
-
 ### Interactions
 | Action | Behavior |
 |--------|----------|
@@ -249,8 +225,6 @@ User input → CommandHandler → TmuxManager / App controller
 | `1-9` keys | Quick-launch project by index |
 | `r` key | Refresh all data manually |
 | `g` key | Refresh git status for selected project |
-| `c` key | Refresh calendar manually |
-| `e` key | Refresh email manually |
 | `q` or `Esc` | Quit gracefully (kill sessions? confirm) |
 | `Tab` | Cycle focus between panels |
 | `↑/↓` | Navigate project list |
@@ -266,8 +240,6 @@ User input → CommandHandler → TmuxManager / App controller
 - **Project already running in tmux:** Don't duplicate; show "already running"
 - **Git repo not found:** Show "not a git repo" in project git panel
 - **Token API unavailable:** Show "token tracking unavailable" — doesn't crash
-- **Google Calendar auth fails:** Show "Calendar unavailable" with setup instructions
-- **Gmail auth fails:** Show "Email unavailable" with setup instructions
 - **No network:** All online services gracefully degrade with cached/offline state
 
 ---
@@ -301,12 +273,6 @@ Main entry point. Initializes blessed Terminal, starts refresh loops, handles ke
 ### dashboard/widgets/tokens.py
 `TokenWidget` — Displays context/token usage per project with color-coded fuel gauge + sparkline history.
 
-### dashboard/widgets/calendar.py
-`CalendarWidget` — Fetches next 3 Google Calendar events via Google Calendar API, shows title, time, attendee count.
-
-### dashboard/widgets/email.py
-`EmailWidget` — Fetches latest 3 unread Gmail emails via Gmail API, shows sender, subject preview, time.
-
 ### dashboard/widgets/eventlog.py
 `EventLogWidget` — Live event stream: tool calls, decisions, errors. Last 50 events, scrollable, filterable.
 
@@ -331,12 +297,6 @@ Main entry point. Initializes blessed Terminal, starts refresh loops, handles ke
 ### agents/switcher.py
 `AgentSwitcher` — Switch agent per project (opencode/claude/codex), persist preference to projects.json. Our own implementation, Thomas has full control.
 
-### services/google_calendar.py
-`GoogleCalendarService` — OAuth-based Google Calendar API integration, fetches upcoming events.
-
-### services/gmail.py
-`GmailService` — OAuth-based Gmail API integration, fetches unread emails.
-
 ### config/projects.json
 Default project configuration with robostock and routercontrol pre-defined, agent field per project.
 
@@ -357,9 +317,7 @@ Main process (commandcenter.py)
 ├── TUI render loop (blessed Terminal)
 ├── Refresh loop (asyncio)
 │   ├── System data (every 1s)
-│   ├── Weather data (every 5min)
-│   ├── Calendar data (every 5min)
-│   └── Email data (every 2min)
+│   └── Weather data (every 5min)
 └── Keyboard handler
     └── tmux window creation → opencode/claude/codex subprocess
 ```
@@ -416,8 +374,6 @@ python commandcenter.py
 - [ ] Git status panel shows branch, dirty state, last 3 commits
 - [ ] Token tracker shows context usage with color-coded fuel gauge + sparkline
 - [ ] Live event log streams tool calls and agent actions
-- [ ] Google Calendar widget shows next 3 meetings
-- [ ] Email widget shows latest 3 unread emails
 - [ ] Keyboard navigation works (arrow keys, Enter, q to quit)
 - [ ] Clean shutdown — tmux windows closed, no zombie processes
 - [ ] Runs on Linux (current platform)
