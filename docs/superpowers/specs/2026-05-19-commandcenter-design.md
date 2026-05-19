@@ -8,7 +8,7 @@
 
 ## 1. Concept & Vision
 
-A **personal command center** that lives in the terminal — part real-time system dashboard, part project launcher, part conversation partner. When you fire it up, it greets you by name, shows you everything about your machine and world, and spins up opencode sessions for your defined projects in split tmux panes.
+A **personal command center** that lives in the terminal — part real-time system dashboard, part project launcher, part conversation partner. When you fire it up, it greets you by name, shows you everything about your machine and world, and spins up AI agent sessions for your defined projects in split tmux panes.
 
 It's not just a utility — it's **your cockpit**. Designed to feel alive, responsive, and a little magical. Every number updates in real-time. Every project is one command away. The kind of tool that makes you want to open a terminal just to look at it.
 
@@ -43,7 +43,7 @@ It's not just a utility — it's **your cockpit**. Designed to feel alive, respo
 │ ╚██████╔╝███████╗██║   ██║   ╚██████╗██║  ██║               │
 │  ╚═════╝ ╚══════╝╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝               │
 │                                                             │
-│  ▶ Welcome back, THJO!                                      │
+│  ▶ Welcome back, THOMAS!                                    │
 │  ▶ System: Linux thjo 6.17.0 | Uptime: 3 days, 14:22        │
 │  ▶ CPU: Intel i9-13900K @ 5.8GHz | 68°C | 34%              │
 │  ▶ RAM: 14.2 GB / 64 GB | Disk: 892 GB / 2 TB              │
@@ -310,12 +310,12 @@ Main process (commandcenter.py)
 │   ├── System data (every 1s)
 │   └── Weather data (every 5min)
 └── Keyboard handler
-    └── tmux window creation → opencode subprocess
+    └── tmux window creation → opencode or claude subprocess
 ```
 
 ### Tmux Integration
 - Use `tmux new-window -t cc-{project}` to create named windows
-- Launch opencode with `tmux send-keys -t cc-{project} "opencode" C-m`
+- Launch opencode/claude with `tmux send-keys -t cc-{project} "{agent}" C-m`
 - List sessions with `tmux list-windows -t cc` or `tmux list-sessions`
 
 ### Error Handling Strategy
@@ -347,7 +347,7 @@ python commandcenter.py
 4. Weather fetches (may show "Loading..." briefly)
 5. Projects from projects.json load
 6. tmux windows created for each `launch_on_start: true` project
-7. opencode sessions start in those windows
+7. AI agent sessions start in those windows (opencode or claude per project setting)
 
 ---
 
