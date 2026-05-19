@@ -3,7 +3,7 @@
     {
       "name": "robostock",
       "path": "/home/thjo/projects/robostock",
-      "agent": "opencode",
+      "agent": "codex",
       "launch_on_start": true
     },
     {
@@ -12,9 +12,5 @@
       "agent": "claude",
       "launch_on_start": true
     }
-  ],
-  "settings": {
-    "weather_location": "Copenhagen",
-    "weather_units": "metric"
-  }
+  ]
 }
