@@ -67,13 +67,15 @@ It's not just a utility — it's **your cockpit**. Designed to feel alive, respo
 2. **Greeting Bar** — Personalized welcome with user name (Thomas), system uptime, current time (local + UTC + Copenhagen)
 3. **System Metrics Panel** — Real-time CPU, RAM, disk, temperatures
 4. **Weather Widget** — Current conditions from wttr.in
-5. **Project List** — Scrollable list from projects.json with agent switcher (OpenCode ↔ Claude Code per project)
+5. **Project List** — Scrollable list from projects.json with agent switcher (OpenCode ↔ Claude ↔ Codex per project)
 6. **Session Manager** — Shows active tmux sessions for projects
 7. **Git Status Panel** — Branch, dirty state, recent commits per project
-8. **Token Tracker** — Real-time context/token usage per project
+8. **Token Tracker** — Real-time context/token usage per project with fuel gauge
 9. **Live Event Log** — Stream of tool calls, decisions, agent actions
 10. **Quick Actions Bar** — Hotkeys 1-9 to jump to/launch projects
-11. **Status Bar** — Last refresh timestamp, connection status
+11. **Google Calendar Widget** — Next 3 upcoming meetings from Google Calendar
+12. **Email Widget** — Latest 3 unread emails from Gmail
+13. **Status Bar** — Last refresh timestamp, connection status
 
 ---
 
@@ -94,21 +96,28 @@ commandcenter/
 │   │   ├── projects.py      # Project list with agent switcher
 │   │   ├── sessions.py      # Tmux session status
 │   │   ├── gitstatus.py     # Branch, dirty, recent commits
-│   │   ├── tokens.py        # Token/context usage tracker
+│   │   ├── tokens.py        # Token/context usage tracker + sparkline
 │   │   ├── eventlog.py      # Live event stream
-│   │   └── quickactions.py  # Hotkey bar (1-9)
+│   │   ├── quickactions.py  # Hotkey bar (1-9)
+│   │   ├── calendar.py      # Google Calendar next 3 meetings
+│   │   └── email.py         # Gmail latest 3 unread
 │   └── refresh.py            # Data refresh loop
 ├── launcher/
 │   ├── __init__.py
 │   ├── tmux.py              # Tmux session/window management
 │   ├── opencode.py          # Opencode process launcher
-│   └── claude.py            # Claude Code process launcher
+│   ├── claude.py            # Claude Code process launcher
+│   └── codex.py            # Codex process launcher (future)
 ├── config/
 │   ├── __init__.py
 │   └── projects.json        # Project definitions with agent preference
 ├── agents/
 │   ├── __init__.py
-│   └── switcher.py         # Switch between OpenCode and Claude per project
+│   └── switcher.py         # Switch agent per project, supports opencode/claude/codex
+├── services/
+│   ├── __init__.py
+│   ├── google_calendar.py  # Google Calendar API integration
+│   └── gmail.py            # Gmail API integration
 ├── requirements.txt
 └── README.md
 ```
@@ -185,21 +194,24 @@ User input → CommandHandler → TmuxManager / App controller
 - Launched with `opencode` or `claude` command in project directory
 - Sessions displayed in dashboard with running status
 
-**F6: Agent Switcher**
-- Each project has a preferred agent: `opencode` or `claude`
-- Switch agent per project via hotkey or menu
+**F6: Agent Switcher (OpenCode ↔ Claude ↔ Codex)**
+- Each project has a preferred agent: `opencode`, `claude`, or `codex`
+- Switch agent per project via `s` key or menu
 - Agent preference persisted in projects.json
-- Visual indicator shows current agent per project (🟢 OpenCode / 🔵 Claude)
+- Visual indicator shows current agent per project (🟢 OpenCode / 🔵 Claude / 🟣 Codex)
+- Codex support is extensible — add new providers by adding launcher/{provider}.py
+- Our own switcher — Thomas has full control, no third-party dependency
 
 **F7: Git Status Panel**
 - Per-project: branch name, dirty state (*), recent commit (last 3)
 - Updates on project selection or manual refresh
 - Uses subprocess git commands
 
-**F8: Token/Context Tracker**
+**F8: Token/Context Tracker with Sparkline**
 - Per-project: context window usage %, token count
 - Color-coded fuel gauge: green (<50%), yellow (50-80%), red (>80%)
 - Shows per-request tokens and cumulative session total
+- Sparkline history showing token usage trend over last 30 data points
 
 **F9: Live Event Log**
 - Streaming panel showing tool calls, decisions, agent actions
@@ -213,14 +225,32 @@ User input → CommandHandler → TmuxManager / App controller
 - Press number to launch/select that project
 - Current selection highlighted
 
+**F11: Google Calendar Widget**
+- Shows next 3 upcoming meetings from Google Calendar
+- Displays: event title, time, attendee count
+- Current/upcoming event highlighted with 💥 icon
+- Conflict detection for overlapping events (🚨 icon)
+- Refreshes every 5 minutes
+- Requires Google OAuth setup (credentials file path in config)
+
+**F12: Email Widget**
+- Shows latest 3 unread emails from Gmail
+- Displays: sender name, subject preview, time received
+- Unread indicator (●) in blue
+- Click to open full email URL in browser
+- Refreshes every 2 minutes
+- Requires Gmail API OAuth setup
+
 ### Interactions
 | Action | Behavior |
 |--------|----------|
-| `Enter` on project | Launch/opencode session in new tmux window |
-| `s` key on project | Switch agent (OpenCode ↔ Claude) for that project |
+| `Enter` on project | Launch agent session in new tmux window |
+| `s` key on project | Switch agent (OpenCode ↔ Claude ↔ Codex) for that project |
 | `1-9` keys | Quick-launch project by index |
 | `r` key | Refresh all data manually |
 | `g` key | Refresh git status for selected project |
+| `c` key | Refresh calendar manually |
+| `e` key | Refresh email manually |
 | `q` or `Esc` | Quit gracefully (kill sessions? confirm) |
 | `Tab` | Cycle focus between panels |
 | `↑/↓` | Navigate project list |
@@ -230,11 +260,15 @@ User input → CommandHandler → TmuxManager / App controller
 - **tmux not installed:** Show error, offer to install, disable session features
 - **opencode not found:** Warn but continue; show "opencode not in PATH" status
 - **claude not found:** If claude selected and not found, offer to switch to opencode
+- **codex not found:** If codex selected and not found, show "codex not in PATH" status
 - **Weather API fails:** Show "Weather unavailable" with last-known state
 - **Project path doesn't exist:** Mark as "PATH NOT FOUND" in red
 - **Project already running in tmux:** Don't duplicate; show "already running"
 - **Git repo not found:** Show "not a git repo" in project git panel
 - **Token API unavailable:** Show "token tracking unavailable" — doesn't crash
+- **Google Calendar auth fails:** Show "Calendar unavailable" with setup instructions
+- **Gmail auth fails:** Show "Email unavailable" with setup instructions
+- **No network:** All online services gracefully degrade with cached/offline state
 
 ---
 
@@ -265,7 +299,13 @@ Main entry point. Initializes blessed Terminal, starts refresh loops, handles ke
 `GitStatusWidget` — Shows branch, dirty state, and last 3 commits for selected project.
 
 ### dashboard/widgets/tokens.py
-`TokenWidget` — Displays context/token usage per project with color-coded fuel gauge.
+`TokenWidget` — Displays context/token usage per project with color-coded fuel gauge + sparkline history.
+
+### dashboard/widgets/calendar.py
+`CalendarWidget` — Fetches next 3 Google Calendar events via Google Calendar API, shows title, time, attendee count.
+
+### dashboard/widgets/email.py
+`EmailWidget` — Fetches latest 3 unread Gmail emails via Gmail API, shows sender, subject preview, time.
 
 ### dashboard/widgets/eventlog.py
 `EventLogWidget` — Live event stream: tool calls, decisions, errors. Last 50 events, scrollable, filterable.
@@ -285,8 +325,17 @@ Main entry point. Initializes blessed Terminal, starts refresh loops, handles ke
 ### launcher/claude.py
 `ClaudeLauncher` — Spawns claude subprocess in specified directory within tmux window.
 
+### launcher/codex.py
+`CodexLauncher` — Spawns codex subprocess in specified directory within tmux window (future).
+
 ### agents/switcher.py
-`AgentSwitcher` — Switch agent per project, persist preference to projects.json.
+`AgentSwitcher` — Switch agent per project (opencode/claude/codex), persist preference to projects.json. Our own implementation, Thomas has full control.
+
+### services/google_calendar.py
+`GoogleCalendarService` — OAuth-based Google Calendar API integration, fetches upcoming events.
+
+### services/gmail.py
+`GmailService` — OAuth-based Gmail API integration, fetches unread emails.
 
 ### config/projects.json
 Default project configuration with robostock and routercontrol pre-defined, agent field per project.
@@ -308,9 +357,11 @@ Main process (commandcenter.py)
 ├── TUI render loop (blessed Terminal)
 ├── Refresh loop (asyncio)
 │   ├── System data (every 1s)
-│   └── Weather data (every 5min)
+│   ├── Weather data (every 5min)
+│   ├── Calendar data (every 5min)
+│   └── Email data (every 2min)
 └── Keyboard handler
-    └── tmux window creation → opencode or claude subprocess
+    └── tmux window creation → opencode/claude/codex subprocess
 ```
 
 ### Tmux Integration
@@ -358,13 +409,16 @@ python commandcenter.py
 - [ ] System metrics update every second without flicker
 - [ ] Weather displays Copenhagen conditions with icon
 - [ ] Projects list shows robostock and routercontrol from projects.json
-- [ ] Agent switcher works per-project (OpenCode ↔ Claude Code)
+- [ ] Agent switcher works per-project (OpenCode ↔ Claude ↔ Codex) with our own switcher
 - [ ] `s` key toggles agent for selected project
-- [ ] tmux sessions created with correct agent (opencode or claude) for each project
+- [ ] tmux sessions created with correct agent for each project
 - [ ] Quick actions bar (1-9) launches correct project
 - [ ] Git status panel shows branch, dirty state, last 3 commits
-- [ ] Token tracker shows context usage with color-coded fuel gauge
+- [ ] Token tracker shows context usage with color-coded fuel gauge + sparkline
 - [ ] Live event log streams tool calls and agent actions
+- [ ] Google Calendar widget shows next 3 meetings
+- [ ] Email widget shows latest 3 unread emails
 - [ ] Keyboard navigation works (arrow keys, Enter, q to quit)
 - [ ] Clean shutdown — tmux windows closed, no zombie processes
 - [ ] Runs on Linux (current platform)
+- [ ] Extensible: adding new AI provider just requires adding launcher/{provider}.py
