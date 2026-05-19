@@ -1,0 +1,298 @@
+# CommandCenter — Terminal Dashboard & Project Launcher
+
+**Spec Version:** 2026-05-19
+**Author:** thjo
+**Status:** Draft
+
+---
+
+## 1. Concept & Vision
+
+A **personal command center** that lives in the terminal — part real-time system dashboard, part project launcher, part conversation partner. When you fire it up, it greets you by name, shows you everything about your machine and world, and spins up opencode sessions for your defined projects in split tmux panes.
+
+It's not just a utility — it's **your cockpit**. Designed to feel alive, responsive, and a little magical. Every number updates in real-time. Every project is one command away. The kind of tool that makes you want to open a terminal just to look at it.
+
+---
+
+## 2. Design Language
+
+### Aesthetic
+- **Style:** Cyberpunk terminal — dark background (#0d1117), neon accents (cyan #00d9ff, magenta #ff00aa, green #00ff88), ASCII art headers
+- **Font:** Monospace (system default) — use Unicode box-drawing characters for panels
+- **Personality:** Greeting with name on start; subtle animated elements; warm but techy
+
+### Color Palette
+| Element | Color | Hex |
+|---------|-------|-----|
+| Background | Deep space | #0d1117 |
+| Primary text | Ice white | #e6edf3 |
+| Secondary text | Muted gray | #7d8590 |
+| Accent cyan | Electric | #00d9ff |
+| Accent magenta | Pulse | #ff00aa |
+| Accent green | Matrix | #00ff88 |
+| Warning | Amber | #ffaa00 |
+| Error | Red | #ff4444 |
+
+### Layout
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ██████╗ ██╗     ██╗████████╗ ██████╗██╗  ██╗               │
+│ ██╔════╝ ██║     ██║╚══██╔══╝██╔════╝██║  ██║               │
+│ ██║  ███╗██║     ██║   ██║   ██║     ███████║               │
+│ ██║   ██║██║     ██║   ██║   ██║     ██╔══██║               │
+│ ╚██████╔╝███████╗██║   ██║   ╚██████╗██║  ██║               │
+│  ╚═════╝ ╚══════╝╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝               │
+│                                                             │
+│  ▶ Welcome back, THJO!                                      │
+│  ▶ System: Linux thjo 6.17.0 | Uptime: 3 days, 14:22        │
+│  ▶ CPU: Intel i9-13900K @ 5.8GHz | 68°C | 34%              │
+│  ▶ RAM: 14.2 GB / 64 GB | Disk: 892 GB / 2 TB              │
+│  ▶ Weather: Copenhagen ☀️ 22°C | Feels like 24°C            │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  PROJECTS                      │  TMUX SESSIONS              │
+│  ┌──────────────────────────┐  │  ┌────────────────────────┐ │
+│  │ ● robostock              │  │  │ [0] robostock          │ │
+│  │   /home/thjo/.../robostock│  │  │ [1] router-control    │ │
+│  │   status: running         │  │  │ [2] ...               │ │
+│  │ ● routercontrol          │  │  └────────────────────────┘ │
+│  │   /home/thjo/.../routerctrl│                            │
+│  │   status: running         │                            │
+│  └──────────────────────────┘  │                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Components
+1. **Header Banner** — ASCII art "COMMANDCENTER" with neon glow effect
+2. **Greeting Bar** — Personalized welcome with user name (Thomas), system uptime
+3. **System Metrics Panel** — Real-time CPU, RAM, disk, temperatures
+4. **Weather Widget** — Current conditions from wttr.in
+5. **Project List** — Scrollable list from projects.json
+6. **Session Manager** — Shows active tmux sessions for projects
+7. **Status Bar** — Last refresh timestamp, connection status
+
+---
+
+## 3. Architecture
+
+### Components
+```
+commandcenter/
+├── commandcenter.py          # Main entry point
+├── dashboard/
+│   ├── __init__.py
+│   ├── tui.py                # Blessed TUI render engine
+│   ├── widgets/
+│   │   ├── __init__.py
+│   │   ├── header.py        # ASCII banner + greeting
+│   │   ├── system.py        # CPU, RAM, disk metrics
+│   │   ├── weather.py       # wttr.in integration
+│   │   ├── projects.py      # Project list display
+│   │   └── sessions.py      # Tmux session status
+│   └── refresh.py            # Data refresh loop
+├── launcher/
+│   ├── __init__.py
+│   ├── tmux.py              # Tmux session/window management
+│   └── opencode.py          # Opencode process launcher
+├── config/
+│   ├── __init__.py
+│   └── projects.json        # Project definitions
+├── requirements.txt
+└── README.md
+```
+
+### Data Flow
+```
+projects.json → ConfigLoader → Project list data
+                                      ↓
+System APIs (psutil) → SystemGatherer → TUI Widgets → Render (blessed)
+                                      ↓
+wttr.in (HTTP) → WeatherService → TUI Widgets
+                                      ↓
+tmux sockets → TmuxManager → Session status → Sessions widget
+                                      ↓
+User input → CommandHandler → TmuxManager / App controller
+```
+
+### Key Libraries
+| Library | Purpose | Justification |
+|---------|---------|---------------|
+| `blessed` | TUI rendering | Best Python TUI lib, excellent keyboard handling |
+| `psutil` | System metrics | Comprehensive system info, cross-platform |
+| `requests` | HTTP client | For wttr.in weather API |
+
+---
+
+## 4. Features & Interactions
+
+### Core Features
+
+**F1: Greeting on Launch**
+- On start, displays personalized ASCII art header
+- Shows "Welcome back, THOMAS!" with current time
+- Subtle fade-in animation for terminal warmth
+
+**F2: Real-Time System Metrics (1s refresh)**
+- CPU: usage %, clock speed, temperature, core count
+- RAM: used/total GB, percentage
+- Disk: used/total GB for root and key mounts
+- System: hostname, OS, kernel, uptime
+
+**F3: Weather Display (5min refresh)**
+- Location: Copenhagen (hardcoded initially, extensible)
+- Data: temperature, conditions, feels-like, humidity, wind
+- Falls back gracefully if offline
+
+**F4: Project Definitions (projects.json)**
+```json
+{
+  "projects": [
+    {
+      "name": "robostock",
+      "path": "/home/thjo/projects/robostock",
+      "launch_on_start": true
+    },
+    {
+      "name": "routercontrol",
+      "path": "/home/thjo/projects/router-control",
+      "launch_on_start": true
+    }
+  ],
+  "settings": {
+    "weather_location": "Copenhagen",
+    "weather_units": "metric"
+  }
+}
+```
+
+**F5: Tmux Project Sessions**
+- Each `launch_on_start: true` project gets a tmux window
+- Windows named after project: `cc-robostock`, `cc-routercontrol`
+- Launched with `opencode` command in project directory
+- Sessions displayed in dashboard with running status
+
+### Interactions
+| Action | Behavior |
+|--------|----------|
+| `Enter` on project | Launch/opencode session in new tmux window |
+| `r` key | Refresh all data manually |
+| `q` or `Esc` | Quit gracefully (kill sessions? confirm) |
+| `Tab` | Cycle focus between panels |
+| `↑/↓` | Navigate project list |
+| `Ctrl+C` | Force quit with confirmation |
+
+### Edge Cases
+- **tmux not installed:** Show error, offer to install, disable session features
+- **opencode not found:** Warn but continue; show "opencode not in PATH" status
+- **Weather API fails:** Show "Weather unavailable" with last-known state
+- **Project path doesn't exist:** Mark as "PATH NOT FOUND" in red
+- **Project already running in tmux:** Don't duplicate; show "already running"
+
+---
+
+## 5. File Manifest
+
+### commandcenter.py
+Main entry point. Initializes blessed Terminal, starts refresh loops, handles keyboard input, renders TUI.
+
+### dashboard/tui.py
+`Dashboard` class that manages layout regions (header, metrics, projects, sessions) and orchestrates rendering.
+
+### dashboard/widgets/header.py
+`HeaderWidget` — ASCII art rendering, greeting text, current time display.
+
+### dashboard/widgets/system.py
+`SystemWidget` — Uses psutil to gather: CPU %, freq, temp, core count; RAM used/total; disk usage; uptime, hostname.
+
+### dashboard/widgets/weather.py
+`WeatherWidget` — Fetches from `wttr.in/Copenhagen?format=j1`, parses JSON, caches result.
+
+### dashboard/widgets/projects.py
+`ProjectsWidget` — Reads from projects.json, displays scrollable list, shows launch status.
+
+### dashboard/widgets/sessions.py
+`SessionsWidget` — Queries tmux for active sessions matching `cc-*` prefix, shows running projects.
+
+### dashboard/refresh.py
+`RefreshManager` — asyncio-based loop managing refresh intervals per data source.
+
+### launcher/tmux.py
+`TmuxManager` — Creates/destroys tmux windows, lists sessions, checks if session exists.
+
+### launcher/opencode.py
+`OpencodeLauncher` — Spawns `opencode` subprocess in specified directory within tmux window.
+
+### config/projects.json
+Default project configuration with robostock and routercontrol pre-defined.
+
+---
+
+## 6. Technical Approach
+
+### Language & Runtime
+- **Python 3.10+** — Modern async support, excellent TUI ecosystem
+- **tmux** — Terminal multiplexing for project sessions
+- **blessed** — TUI rendering (successor to blessings)
+- **psutil** — System metrics
+- **requests** — Weather API calls
+
+### Process Model
+```
+Main process (commandcenter.py)
+├── TUI render loop (blessed Terminal)
+├── Refresh loop (asyncio)
+│   ├── System data (every 1s)
+│   └── Weather data (every 5min)
+└── Keyboard handler
+    └── tmux window creation → opencode subprocess
+```
+
+### Tmux Integration
+- Use `tmux new-window -t cc-{project}` to create named windows
+- Launch opencode with `tmux send-keys -t cc-{project} "opencode" C-m`
+- List sessions with `tmux list-windows -t cc` or `tmux list-sessions`
+
+### Error Handling Strategy
+- All external calls (tmux, opencode, HTTP) wrapped in try/except
+- Graceful degradation: if tmux unavailable, disable session features
+- Weather failures don't crash — show cached/unavailable state
+- Logging to file for debugging: `~/.commandcenter/logs/`
+
+---
+
+## 7. Installation & Usage
+
+### Prerequisites
+```bash
+pip install -r requirements.txt
+tmux new -s commandcenter  # Test tmux is available
+```
+
+### Running
+```bash
+cd /home/thjo/projects/commandcenter
+python commandcenter.py
+```
+
+### First-Launch Experience
+1. ASCII banner animates in
+2. "Welcome back, THJO!" greeting appears
+3. System metrics start streaming in
+4. Weather fetches (may show "Loading..." briefly)
+5. Projects from projects.json load
+6. tmux windows created for each `launch_on_start: true` project
+7. opencode sessions start in those windows
+
+---
+
+## 8. Success Criteria
+
+- [ ] Launches with `python commandcenter.py` and displays TUI immediately
+- [ ] Greeting shows user name (Thomas) prominently
+- [ ] System metrics update every second without flicker
+- [ ] Weather displays Copenhagen conditions with icon
+- [ ] Projects list shows robostock and routercontrol from projects.json
+- [ ] tmux sessions created with opencode running for each project
+- [ ] Keyboard navigation works (arrow keys, Enter, q to quit)
+- [ ] Clean shutdown — tmux windows closed, no zombie processes
+- [ ] Runs on Linux (current platform)
