@@ -42,7 +42,9 @@ active_projects = {0: None, 1: None}
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html", version=__version__)
+    import getpass
+    username = getpass.getuser().upper()
+    return render_template("index.html", version=__version__, username=username)
 
 
 @app.route("/api/version")
@@ -311,6 +313,14 @@ def git_thread():
 def handle_connect():
     ptys[request.sid] = {}
     emit_event("INFO", f"client connected · {request.sid[:6]}")
+    # Send weather immediately on connect
+    try:
+        data = weather_service.get_current()
+        emoji = get_weather_emoji(data['condition'])
+        text = f"{emoji} {data['temp_c']:.0f}°C {data['condition']}"
+        socketio.emit("weather_update", {"text": text, **data}, to=request.sid)
+    except Exception:
+        pass
 
 
 @socketio.on("disconnect")
