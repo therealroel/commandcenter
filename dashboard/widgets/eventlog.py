@@ -24,8 +24,7 @@ class EventLogWidget:
         self.events = events[-self.MAX_EVENTS:]
 
     def _fgcolor(self, hex_color):
-        r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-        return self.term.rgb_color(r, g, b)
+        return self.term.white
 
     def render(self):
         lines = [f"EVENT LOG ({len(self.events)} events)", ""]

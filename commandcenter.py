@@ -88,7 +88,13 @@ class Dashboard:
             cpu_color = "#ffaa00"
         else:
             cpu_color = "#ff4444"
-        lines.append(self.term.color(f"CPU: {cpu['percent']:.0f}% @ {cpu['freq_mhz']:.0f}MHz | {cpu['temp_c']:.0f}°C", cpu_color))
+        cpu_line = f"CPU: {cpu['percent']:.0f}% @ {cpu['freq_mhz']:.0f}MHz | {cpu['temp_c']:.0f}°C"
+        if cpu["percent"] < 70:
+            lines.append(self.term.green(cpu_line))
+        elif cpu["percent"] < 90:
+            lines.append(self.term.yellow(cpu_line))
+        else:
+            lines.append(self.term.red(cpu_line))
         lines.append(f"RAM: {ram['used_gb']:.1f} / {ram['total_gb']:.1f} GB | {ram['percent']:.0f}%")
 
         weather = self.weather_service.get_current()
@@ -150,8 +156,6 @@ def main():
     term = Terminal()
 
     tmux_manager = TmuxManager()
-    if not tmux_manager.is_available():
-        print("Warning: tmux not available, running in limited mode")
 
     weather_service = WeatherService()
     system_gatherer = SystemGatherer()
@@ -176,10 +180,11 @@ def main():
 
     try:
         with term.cbreak():
-            dashboard.render()
-            key = ''
+            print(term.clear)
             while True:
-                key = term.inkey(timeout=0.1)
+                output = dashboard.render()
+                print(term.move_xy(0, 0) + output)
+                key = term.inkey(timeout=1)
                 if key:
                     action = dashboard.handle_input(str(key))
                     if action == 'quit':
@@ -188,10 +193,6 @@ def main():
         print(f"Error: {e}")
     finally:
         dashboard.refresh_manager.stop()
-        windows = tmux_manager.list_windows("cc-")
-        for window in windows:
-            project_name = window.replace("cc-", "")
-            tmux_manager.close_window(project_name)
 
 
 if __name__ == "__main__":

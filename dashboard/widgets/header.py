@@ -3,11 +3,6 @@ import os
 
 
 class HeaderWidget:
-    BACKGROUND = "#0d1117"
-    PRIMARY = "#e6edf3"
-    SECONDARY = "#7d8590"
-    ACCENT_CYAN = "#00d9ff"
-
     def __init__(self, term):
         self.term = term
 
@@ -15,9 +10,12 @@ class HeaderWidget:
     def height(self):
         return 8
 
-    def _fgcolor(self, hex_color):
+    def _color(self, hex_color):
         r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-        return self.term.rgb_color(r, g, b)
+        try:
+            return self.term.color(r, g, b)
+        except Exception:
+            return self.term.white
 
     def render(self):
         hostname = os.uname().nodename
@@ -32,28 +30,22 @@ class HeaderWidget:
             lines.append(line)
 
         lines.append("")
-        lines.append(f"{self._fgcolor(self.ACCENT_CYAN)}▶ Welcome back, THOMAS!{self._fgcolor(self.PRIMARY)}")
-        lines.append(f"{self._fgcolor(self.PRIMARY)}  System: {hostname} | Uptime: {uptime}")
+        lines.append(f"{self._color('#00d9ff')}▶ Welcome back, THOMAS!{self.term.normal}")
+        lines.append(f"{self.term.white}  System: {hostname} | Uptime: {uptime}")
         lines.append("")
-        lines.append(f"{self._fgcolor(self.SECONDARY)}  Clock: {local_time} local | {utc_time} UTC | {copenhagen_time} Copenhagen")
+        lines.append(f"{self.term.dim}  Clock: {local_time} local | {utc_time} UTC | {copenhagen_time} Copenhagen")
         lines.append("")
 
         return "\n".join(lines)
 
     def _build_banner(self):
-        chars = {
-            "tl": "╔", "tr": "╗", "bl": "╚", "br": "╝",
-            "h": "═", "v": "║",
-            "fill_tl": "█▓", "fill_tr": "▓█", "fill_m": "▒░",
-            "fill_bl": "▀▄", "fill_br": "▄▀"
-        }
-
+        cyan = self._color('#00d9ff')
         banner_lines = [
-            f"{self._fgcolor(self.ACCENT_CYAN)}{chars['tl']}{chars['h']*6}{chars['fill_tl']}{chars['h']*10}{chars['fill_tr']}{chars['h']*6}{chars['tr']}",
-            f"{self._fgcolor(self.ACCENT_CYAN)}{chars['v']}{chars['fill_m']*11}{chars['v']}",
-            f"{self._fgcolor(self.ACCENT_CYAN)}{chars['v']} COMMAND {chars['fill_m']*3} CENTER {chars['fill_m']*4}{chars['v']}",
-            f"{self._fgcolor(self.ACCENT_CYAN)}{chars['v']}{chars['fill_m']*11}{chars['v']}",
-            f"{self._fgcolor(self.ACCENT_CYAN)}{chars['bl']}{chars['h']*6}{chars['fill_bl']}{chars['h']*10}{chars['fill_br']}{chars['h']*6}{chars['br']}",
+            f"{cyan}╔══════█▓══════════▓█══════╗",
+            f"{cyan}║▒░▒░▒░▒░▒░▒░▒░▒░▒░▒░▒░║",
+            f"{cyan}║ COMMAND ▒░▒░▒░ CENTER ▒░▒░▒░▒░║",
+            f"{cyan}║▒░▒░▒░▒░▒░▒░▒░▒░▒░▒░▒░║",
+            f"{cyan}╚══════▀▄══════════▄▀══════╝",
         ]
         return banner_lines
 
