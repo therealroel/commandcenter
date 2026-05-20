@@ -40,6 +40,20 @@ python server.py
 # Open http://localhost:5050
 ```
 
+### Desktop App (Linux)
+
+Install as a desktop application with its own Chrome window:
+
+```bash
+./install-desktop.sh
+```
+
+This creates:
+- `~/.local/bin/commandcenter` — launcher script
+- `~/.local/share/applications/commandcenter.desktop` — app menu entry
+
+Then run `commandcenter` or find "CommandCenter" in your app launcher.
+
 ## Requirements
 
 - Python 3.10+
