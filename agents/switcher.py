@@ -26,6 +26,7 @@ class AgentSwitcher:
             json.dump({"projects": projects}, f, indent=2)
 
     def switch_agent(self, project_name: str) -> str:
+        """Cycle to the next agent for a project."""
         projects = self.load_projects()
         for project in projects:
             if project["name"] == project_name:
@@ -35,4 +36,16 @@ class AgentSwitcher:
                 project["agent"] = new_agent
                 self.save_projects(projects)
                 return new_agent
+        raise ValueError(f"Project '{project_name}' not found")
+
+    def set_agent(self, project_name: str, agent: str) -> str:
+        """Set a specific agent for a project."""
+        if agent not in AGENT_CYCLE:
+            raise ValueError(f"Unknown agent: {agent}")
+        projects = self.load_projects()
+        for project in projects:
+            if project["name"] == project_name:
+                project["agent"] = agent
+                self.save_projects(projects)
+                return agent
         raise ValueError(f"Project '{project_name}' not found")

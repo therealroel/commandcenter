@@ -447,13 +447,17 @@ def handle_term_close(data):
 
 @socketio.on("agent_switch")
 def handle_agent_switch(data):
-    """Cycle and persist the agent for a project, then re-open its PTY."""
+    """Set the agent for a project (or cycle if no agent specified)."""
     project_name = data.get("project")
     panel = int(data.get("panel", 0))
+    new_agent = data.get("agent")  # specific agent or None to cycle
     if not project_name:
         return
     try:
-        new_agent = switcher.switch_agent(project_name)
+        if new_agent and new_agent in AGENT_CYCLE:
+            switcher.set_agent(project_name, new_agent)
+        else:
+            new_agent = switcher.switch_agent(project_name)
         emit_event("INFO", f"{project_name} → {new_agent}")
         socketio.emit("agent_switched", {"project": project_name, "agent": new_agent, "panel": panel})
     except ValueError as e:

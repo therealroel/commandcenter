@@ -1021,9 +1021,57 @@ body::after {
   margin-left: 2px;
 }
 .agent-btn:hover .a-cycle {
-  transform: rotate(120deg);
+  transform: rotate(180deg);
   color: var(--cyan);
 }
+
+/* ============= AGENT DROPDOWN ============= */
+.agent-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--card);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0,217,255,0.2);
+  z-index: 100;
+  min-width: 140px;
+  display: none;
+  overflow: hidden;
+}
+.agent-dropdown.open { display: block; }
+.agent-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  border-left: 2px solid transparent;
+}
+.agent-dropdown-item:hover {
+  background: rgba(0,217,255,0.08);
+  color: var(--text-primary);
+  border-left-color: var(--cyan);
+}
+.agent-dropdown-item.active {
+  background: rgba(0,217,255,0.12);
+  color: var(--cyan);
+  border-left-color: var(--cyan);
+}
+.agent-dropdown-item .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.agent-dropdown-item .dot.opencode { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.agent-dropdown-item .dot.claude { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.agent-dropdown-item .dot.codex { background: var(--magenta); box-shadow: 0 0 6px var(--magenta); }
+.agent-btn { position: relative; }
 
 /* ============= GIT PILL ============= */
 .git-pill {
@@ -2278,11 +2326,62 @@ body::after {
     document.getElementById('event-log').classList.toggle('open', eventLogOpen);
   }
 
-  /* ===== AGENT SWITCH ===== */
-  function switchAgent(panelId) {
+  /* ===== AGENT DROPDOWN ===== */
+  let openDropdown = null;
+
+  function createDropdown(panelId) {
+    const btn = document.getElementById(`agent-btn-${panelId}`);
+    let dropdown = btn.querySelector('.agent-dropdown');
+    if (!dropdown) {
+      dropdown = document.createElement('div');
+      dropdown.className = 'agent-dropdown';
+      dropdown.innerHTML = AGENTS.map((a, idx) => `
+        <div class="agent-dropdown-item" data-idx="${idx}">
+          <span class="dot ${a.cls}"></span>
+          <span>${a.name}</span>
+        </div>
+      `).join('');
+      btn.appendChild(dropdown);
+      dropdown.addEventListener('click', (e) => {
+        const item = e.target.closest('.agent-dropdown-item');
+        if (!item) return;
+        e.stopPropagation();
+        const idx = parseInt(item.dataset.idx);
+        selectAgent(panelId, idx);
+        closeDropdown();
+      });
+    }
+    return dropdown;
+  }
+
+  function toggleDropdown(panelId) {
+    const dropdown = createDropdown(panelId);
+    if (openDropdown && openDropdown !== dropdown) {
+      openDropdown.classList.remove('open');
+    }
+    const isOpen = dropdown.classList.toggle('open');
+    openDropdown = isOpen ? dropdown : null;
+    if (isOpen) {
+      // Mark current agent as active
+      const currentIdx = panels[panelId].agentIdx;
+      dropdown.querySelectorAll('.agent-dropdown-item').forEach((item, idx) => {
+        item.classList.toggle('active', idx === currentIdx);
+      });
+    }
+  }
+
+  function closeDropdown() {
+    if (openDropdown) {
+      openDropdown.classList.remove('open');
+      openDropdown = null;
+    }
+  }
+
+  function selectAgent(panelId, agentIdx) {
     const p = panels[panelId];
-    p.agentIdx = (p.agentIdx + 1) % AGENTS.length;
-    const agent = AGENTS[p.agentIdx];
+    if (p.agentIdx === agentIdx) return; // same agent, no change
+    p.agentIdx = agentIdx;
+    const agent = AGENTS[agentIdx];
     const btn = document.getElementById(`agent-btn-${panelId}`);
     btn.querySelector('.a-glyph').textContent = agent.emoji;
     btn.className = `agent-btn ${agent.cls}`;
@@ -2293,8 +2392,7 @@ body::after {
     // persist on server side if we know the project
     const projName = panelProject[panelId];
     if (projName) {
-      // server will cycle in its own order — we cycle locally too; reload to sync
-      socket.emit('agent_switch', { project: projName, panel: panelId });
+      socket.emit('agent_switch', { project: projName, panel: panelId, agent: agent.name });
     }
     // swap PTY to new agent
     socket.emit('term_close', { panel: panelId });
@@ -2302,8 +2400,14 @@ body::after {
   }
 
   document.querySelectorAll('.agent-btn').forEach(el => {
-    el.addEventListener('click', () => switchAgent(parseInt(el.dataset.panel)));
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDropdown(parseInt(el.dataset.panel));
+    });
   });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', closeDropdown);
 
 
   /* ===== GLOBAL HOTKEYS =====
