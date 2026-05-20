@@ -12,6 +12,7 @@ import psutil
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
 
+from version import __version__
 from services.pty_bridge import PtyBridge
 from agents.switcher import AgentSwitcher, AGENT_CYCLE
 from launcher.tmux import TmuxManager
@@ -42,7 +43,12 @@ active_projects = {0: None, 1: None}
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", version=__version__)
+
+
+@app.route("/api/version")
+def api_version():
+    return jsonify({"version": __version__})
 
 
 @app.route("/api/projects")

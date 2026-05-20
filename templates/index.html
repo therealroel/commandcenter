@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -462,9 +463,11 @@ body::after {
   position: relative;
 }
 .term-host .xterm { height: 100%; }
-.term-host .xterm-viewport { background: transparent !important; }
-.term-host .xterm-viewport::-webkit-scrollbar { width: 4px; }
-.term-host .xterm-viewport::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+.term-host .xterm-viewport { background: transparent !important; overflow-y: scroll !important; }
+.term-host .xterm-viewport::-webkit-scrollbar { width: 8px; }
+.term-host .xterm-viewport::-webkit-scrollbar-track { background: var(--bg-2); }
+.term-host .xterm-viewport::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; }
+.term-host .xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--accent-muted); }
 
 /* Loading indicator */
 .term-loading {
@@ -1353,7 +1356,7 @@ body::after {
 
 <!-- ============= BOOT OVERLAY ============= -->
 <div class="boot-overlay" id="boot">
-  <div class="boot-logo">⚡ COMMANDCENTER v1.0</div>
+  <div class="boot-logo">⚡ COMMANDCENTER v{{ version }}</div>
   <div class="boot-lines" id="boot-lines"></div>
 </div>
 
@@ -1499,7 +1502,7 @@ body::after {
     <span class="event-counter" id="event-log-toggle">EVENTS · <span id="event-counter-num">0</span></span>
     <span id="conn-detail">SOCKET · ESTABLISHED</span>
     <span id="tmux-status">TMUX · ?</span>
-    <span>BUILD 1.1.0</span>
+    <span>v{{ version }}</span>
   </div>
 </footer>
 
@@ -1667,6 +1670,7 @@ body::after {
   // Per panel: which project name currently bound
   const panelProject = { 0: null, 1: null, 2: null };
   const terms = {};
+  window.terms = terms; // expose for debugging
 
   const TERM_THEME = {
     background: '#05080d',
@@ -1717,10 +1721,14 @@ body::after {
       cursorStyle: 'bar',
       allowTransparency: true,
       theme: TERM_THEME,
-      scrollback: 5000,
+      scrollback: 10000,
+      convertEol: true,
+      allowProposedApi: true,
     });
     const fit = new FitAddon.FitAddon();
     term.loadAddon(fit);
+    const webLinks = new WebLinksAddon.WebLinksAddon();
+    term.loadAddon(webLinks);
 
     // Track if we've received any output yet
     let hasOutput = false;
@@ -1753,6 +1761,18 @@ body::after {
     t.term.open(host);
     try { t.fit.fit(); } catch (e) {}
     t.term.focus();
+
+    // Forward mouse wheel to tmux (which has mouse mode on)
+    host.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      // SGR mouse encoding for wheel: \x1b[<64;x;yM (up) or \x1b[<65;x;yM (down)
+      const btn = e.deltaY < 0 ? 64 : 65;
+      const seq = `\x1b[<${btn};1;1M`;
+      const count = Math.max(1, Math.abs(Math.round(e.deltaY / 50)));
+      for (let i = 0; i < count; i++) {
+        socket.emit('term_input', { panel: panelId, data: seq });
+      }
+    }, { passive: false });
   }
 
   socket.on('term_output', (msg) => {
