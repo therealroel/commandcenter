@@ -142,17 +142,32 @@ def scan_pty_signals(panel, chunk):
     """Look for human-meaningful events inside raw PTY bytes."""
     text = ANSI_RE.sub(b"", chunk).decode("utf-8", errors="replace")
     lowered = text.lower()
+    ch = panel + 1  # panel 0 = CH 1, etc.
+
+    # Skip noisy startup lines
+    if "claude code v" in lowered or "───" in text:
+        return
+
+    # Real errors: look for actual error messages, not UI chrome
     if "error" in lowered or "traceback" in lowered:
-        line = next((l for l in text.splitlines() if "error" in l.lower() or "Traceback" in l), "")
-        if line.strip():
-            emit_event("ERROR", f"[p{panel}] {line.strip()[:120]}")
-    if "running tool" in lowered or "tool_use" in lowered or "● " in text:
-        for l in text.splitlines():
-            if "tool" in l.lower() or l.startswith("● "):
-                emit_event("TOOL", f"[p{panel}] {l.strip()[:120]}")
+        for line in text.splitlines():
+            ll = line.lower().strip()
+            # Skip false positives
+            if not ll or "claude code" in ll or "───" in line:
+                continue
+            if "error" in ll or "Traceback" in line:
+                emit_event("ERROR", f"[CH{ch}] {line.strip()[:120]}")
                 break
-    if "thinking" in lowered:
-        emit_event("THINK", f"[p{panel}] thinking…")
+
+    # Tool use
+    if "● " in text:
+        for l in text.splitlines():
+            if l.strip().startswith("● "):
+                emit_event("TOOL", f"[CH{ch}] {l.strip()[:120]}")
+                break
+
+    if "thinking" in lowered and "thinking…" not in lowered:
+        emit_event("THINK", f"[CH{ch}] thinking…")
 
 
 # ---------------------------------------------------------------------------
@@ -209,13 +224,17 @@ def network_thread():
 
 
 def weather_thread():
+    first_run = True
     while True:
         try:
             data = weather_service.get_current()
-            socketio.emit("weather_update", data)
+            text = f"{data['temp_c']:.0f}°C {data['condition']}"
+            socketio.emit("weather_update", {"text": text, **data})
         except Exception as exc:
             print("weather_thread err:", exc)
-        gevent.sleep(300)
+        # Quick retry on first run, then every 5 min
+        gevent.sleep(10 if first_run else 300)
+        first_run = False
 
 
 def git_thread():
@@ -276,6 +295,10 @@ def _resolve_project(name):
 
 @socketio.on("term_open")
 def handle_term_open(data):
+    import time as _time
+    t0 = _time.time()
+    print(f"[TIMING] term_open START panel={data.get('panel')} project={data.get('project')}")
+
     sid = request.sid
     panel = int(data.get("panel", 0))
     project_name = data.get("project")
@@ -300,11 +323,15 @@ def handle_term_open(data):
     session = f"cc-{project_name or 'panel'+str(panel)}-{agent_cmd}"
 
     if tmux.is_available():
+        # Check if session already exists - if so, just attach (fast resume)
+        # If not, create new session with the agent command
         shell_cmd = (
             f"cd {cwd!r} && "
+            f"(tmux has-session -t {session!r} 2>/dev/null && "
+            f"exec tmux attach-session -t {session!r} || "
             f"(command -v {agent_cmd} >/dev/null && "
-            f"exec tmux new-session -A -s {session!r} {agent_cmd} || "
-            f"exec bash -i)"
+            f"exec tmux new-session -s {session!r} {agent_cmd} || "
+            f"exec bash -i))"
         )
     else:
         shell_cmd = (
@@ -342,9 +369,15 @@ def handle_term_open(data):
         except Exception:
             pass
 
+    print(f"[TIMING] term_open SHELL_CMD built: {_time.time()-t0:.3f}s")
+    print(f"[TIMING] shell_cmd: {shell_cmd[:100]}...")
+
     bridge = PtyBridge(argv, on_data, rows=rows, cols=cols)
+    print(f"[TIMING] term_open PTY BRIDGE created: {_time.time()-t0:.3f}s")
+
     sid_ptys[panel] = {"bridge": bridge, "project": project_name, "agent": agent, "tokens": tokens}
     active_projects[panel] = project_name
+    print(f"[TIMING] term_open DONE: {_time.time()-t0:.3f}s")
     emit_event("INFO", f"opened {project_name or '?'} ({agent}) on panel {panel}")
 
 

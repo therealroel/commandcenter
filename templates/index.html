@@ -314,6 +314,10 @@ body::after {
   position: relative;
   z-index: 4;
 }
+.main[data-panels="1"] { grid-template-columns: 1fr; }
+.main[data-panels="2"] { grid-template-columns: 1fr 1fr; }
+.main[data-panels="3"] { grid-template-columns: 1fr 1fr 1fr; }
+.chat-panel[data-hidden="1"] { display: none; }
 
 .chat-panel {
   background: linear-gradient(180deg, var(--card), var(--bg-2));
@@ -352,11 +356,11 @@ body::after {
 }
 
 .panel-tag {
-  font-size: 11px;
-  color: var(--text-dim);
-  letter-spacing: 0.2em;
+  font-size: 9px;
+  color: var(--yellow);
+  letter-spacing: 0.15em;
   padding: 2px 6px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,170,0,0.35);
   border-radius: 2px;
 }
 
@@ -461,6 +465,44 @@ body::after {
 .term-host .xterm-viewport { background: transparent !important; }
 .term-host .xterm-viewport::-webkit-scrollbar { width: 4px; }
 .term-host .xterm-viewport::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* Loading indicator */
+.term-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--cyan);
+}
+.term-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.term-loading-text {
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: var(--text-secondary);
+  animation: loadingPulse 1.5s ease-in-out infinite;
+}
+.term-loading-agent {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-shadow: var(--glow-cyan);
+}
+@keyframes loadingPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
 
 /* Messages */
 .messages {
@@ -909,6 +951,50 @@ body::after {
   box-shadow: 0 0 8px rgba(0,217,255,0.2);
 }
 
+.layout-switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-right: 8px;
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.layout-switch button {
+  background: var(--card);
+  border: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: all 0.15s ease;
+}
+.layout-switch button:last-child { border-right: none; }
+.layout-switch button:hover { color: var(--text-primary); background: rgba(0,217,255,0.08); }
+.layout-switch button.on {
+  background: rgba(0,217,255,0.15);
+  color: var(--cyan);
+  text-shadow: 0 0 6px rgba(0,217,255,0.5);
+}
+
+.strip-chip .strip-x {
+  display: none;
+  margin-left: 6px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.strip-chip:hover .strip-x { display: inline; }
+.strip-chip .strip-x:hover { color: var(--red); }
+
 .strip-add {
   flex-shrink: 0;
   background: linear-gradient(180deg, rgba(0,255,136,0.15), rgba(0,255,136,0.05));
@@ -1004,31 +1090,30 @@ body::after {
 }
 .panel-project:hover { color: var(--cyan); text-shadow: var(--glow-cyan); }
 
-/* ============= COMMAND TICKER ============= */
+/* ============= LATEST ERROR DISPLAY ============= */
 .ticker {
   flex: 1;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
   position: relative;
-  max-width: 480px;
   color: var(--text-dim);
   font-size: 13px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
+  min-width: 0;
 }
-.ticker-track {
-  display: inline-block;
-  padding-left: 100%;
-  animation: tickerMove 600s linear infinite;
+.ticker-content {
+  display: inline;
 }
-@keyframes tickerMove {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-100%); }
+.ticker-content.t-TOOL { color: var(--yellow); }
+.ticker-content.t-ERROR { color: var(--red); text-shadow: 0 0 6px rgba(255,68,102,0.4); }
+.ticker-content.t-THINK { color: var(--cyan); }
+.ticker-content.t-INFO { color: var(--green); }
+.ticker-type {
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  margin-right: 8px;
 }
-.ticker-track span { margin-right: 32px; color: var(--text-secondary); }
-.ticker-track span.t-TOOL { color: var(--yellow); }
-.ticker-track span.t-ERROR { color: var(--red); }
-.ticker-track span.t-THINK { color: var(--cyan); }
-.ticker-track span.t-INFO { color: var(--green); }
 
 /* ============= PROJECT PALETTE ============= */
 .palette-overlay {
@@ -1124,6 +1209,15 @@ body::after {
   border-bottom: 1px dashed var(--border);
   background: rgba(0,255,136,0.04);
   color: var(--green);
+}
+.palette-item.add-new.sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: #0a1612;
+  box-shadow: 0 -4px 14px rgba(0,0,0,0.5), 0 0 16px rgba(0,255,136,0.25);
+  border-top: 1px solid rgba(0,255,136,0.5);
+  border-bottom: none;
 }
 .palette-item.add-new .pname { color: var(--green); }
 .palette-item.add-new:hover, .palette-item.add-new.active {
@@ -1326,16 +1420,21 @@ body::after {
 <!-- ============= PROJECTS STRIP ============= -->
 <div class="projects-strip">
   <div class="strip-label">▣ PROJECTS</div>
+  <div class="layout-switch" id="layout-switch">
+    <button data-count="1">1</button>
+    <button data-count="2" class="on">2</button>
+    <button data-count="3">3</button>
+  </div>
   <div class="strip-items" id="strip-items"></div>
   <button class="strip-add" id="strip-add">＋ ADD PROJECT</button>
 </div>
 
 <!-- ============= MAIN ============= -->
-<main class="main">
+<main class="main" data-panels="2">
   <div class="chat-panel" id="panel-0" tabindex="0">
     <div class="panel-header">
       <span class="panel-tag">CH 01</span>
-      <button class="agent-btn opencode" data-panel="0" id="agent-btn-0" title="Click to cycle agent · Ctrl+Alt+S">
+      <button class="agent-btn opencode" data-panel="0" id="agent-btn-0" title="Click to cycle agent">
         <span class="a-glyph">&#x1F7E2;</span>
         <span class="a-name" id="agent-name-0">opencode</span>
         <span class="a-cycle">↻</span>
@@ -1355,7 +1454,7 @@ body::after {
   <div class="chat-panel" id="panel-1" tabindex="0">
     <div class="panel-header">
       <span class="panel-tag">CH 02</span>
-      <button class="agent-btn claude" data-panel="1" id="agent-btn-1" title="Click to cycle agent · Ctrl+Alt+S">
+      <button class="agent-btn claude" data-panel="1" id="agent-btn-1" title="Click to cycle agent">
         <span class="a-glyph">&#x1F535;</span>
         <span class="a-name" id="agent-name-1">claude</span>
         <span class="a-cycle">↻</span>
@@ -1371,16 +1470,31 @@ body::after {
     </div>
     <div class="term-host" id="term-1" data-panel="1"></div>
   </div>
+
+  <div class="chat-panel" id="panel-2" tabindex="0" data-hidden="1">
+    <div class="panel-header">
+      <span class="panel-tag">CH 03</span>
+      <button class="agent-btn claude" data-panel="2" id="agent-btn-2" title="Click to cycle agent">
+        <span class="a-glyph">&#x1F535;</span>
+        <span class="a-name" id="agent-name-2">claude</span>
+        <span class="a-cycle">↻</span>
+      </button>
+      <span class="panel-project">--</span>
+      <span class="git-pill" id="git-2" title="git status">--</span>
+      <div class="status-dot disconnected" id="status-2"></div>
+    </div>
+    <div class="fuel-row">
+      <span>FUEL</span>
+      <div class="fuel-gauge"><div class="fuel-gauge-bar" id="fuel-2"></div></div>
+      <span class="fuel-pct" id="fuel-pct-2">0%</span>
+    </div>
+    <div class="term-host" id="term-2" data-panel="2"></div>
+  </div>
 </main>
 
 <!-- ============= FOOTER ============= -->
 <footer class="footer">
-  <div class="footer-section">
-    <span class="hotkey"><kbd>Ctrl+Alt+P</kbd> PROJECTS</span>
-    <span class="hotkey"><kbd>Ctrl+Alt+S</kbd> AGENT</span>
-    <span class="hotkey"><kbd>Ctrl+Alt+L</kbd> LOG</span>
-  </div>
-  <div class="ticker"><div class="ticker-track" id="ticker-track"><span>// commandcenter online · awaiting telemetry stream...</span></div></div>
+  <div class="ticker" id="ticker"><span class="ticker-content t-INFO"><span class="ticker-type">INFO</span>commandcenter online · awaiting telemetry stream...</span></div>
   <div class="footer-section">
     <span class="event-counter" id="event-log-toggle">EVENTS · <span id="event-counter-num">0</span></span>
     <span id="conn-detail">SOCKET · ESTABLISHED</span>
@@ -1396,7 +1510,7 @@ body::after {
 <div class="palette-overlay" id="palette-overlay">
   <div class="palette" role="dialog" aria-label="project palette">
     <div class="palette-header">
-      <span>▸ SWITCH PROJECT</span>
+      <span id="palette-title">▸ SWITCH PROJECT</span>
       <span class="target">PANEL <b id="palette-target">--</b></span>
     </div>
     <div class="palette-path" id="palette-path" style="display:none;"></div>
@@ -1422,7 +1536,7 @@ body::after {
       <div class="err" id="pf-err"></div>
       <div class="actions">
         <button type="button" class="ghost" id="pf-back">← Back</button>
-        <button type="button" id="pf-save">Save Project</button>
+        <button type="button" id="pf-save">＋ Add Project</button>
       </div>
     </div>
     <div class="palette-footer">
@@ -1516,7 +1630,8 @@ body::after {
   ];
   const panels = [
     { id: 0, agentIdx: 0, streaming: false, currentAiMsg: null },
-    { id: 1, agentIdx: 1, streaming: false, currentAiMsg: null }
+    { id: 1, agentIdx: 1, streaming: false, currentAiMsg: null },
+    { id: 2, agentIdx: 1, streaming: false, currentAiMsg: null }
   ];
 
   /* ===== EVENTS ===== */
@@ -1550,7 +1665,7 @@ body::after {
   // Will be filled from /api/projects. First two become the initial panel slots.
   let PROJECT_LIST = [];
   // Per panel: which project name currently bound
-  const panelProject = { 0: null, 1: null };
+  const panelProject = { 0: null, 1: null, 2: null };
   const terms = {};
 
   const TERM_THEME = {
@@ -1585,6 +1700,15 @@ body::after {
       try { terms[panelId].term.dispose(); } catch (e) {}
       host.innerHTML = '';
     }
+
+    // Show loading indicator
+    const agentName = AGENTS[panels[panelId].agentIdx].name;
+    host.innerHTML = `<div class="term-loading">
+      <div class="term-loading-spinner"></div>
+      <div class="term-loading-text">LOADING AI AGENT...</div>
+      <div class="term-loading-agent">${agentName.toUpperCase()}</div>
+    </div>`;
+
     const term = new Terminal({
       fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
       fontSize: 14,
@@ -1597,20 +1721,20 @@ body::after {
     });
     const fit = new FitAddon.FitAddon();
     term.loadAddon(fit);
-    term.open(host);
-    try { fit.fit(); } catch (e) {}
-    term.focus();
 
-    terms[panelId] = { term, fit };
+    // Track if we've received any output yet
+    let hasOutput = false;
 
     const proj = panelProject[panelId];
     socket.emit('term_open', {
       panel: panelId,
       project: proj,
-      agent: AGENTS[panels[panelId].agentIdx].name,
-      rows: term.rows,
-      cols: term.cols,
+      agent: agentName,
+      rows: 40,
+      cols: 120,
     });
+
+    terms[panelId] = { term, fit, ready: false };
 
     term.onData(d => socket.emit('term_input', { panel: panelId, data: d }));
     term.onResize(({ rows, cols }) =>
@@ -1618,9 +1742,24 @@ body::after {
     );
   }
 
+  // When we receive output, show the terminal if still loading
+  function showTermIfReady(panelId) {
+    const t = terms[panelId];
+    if (!t || t.ready) return;
+    t.ready = true;
+    const host = document.getElementById(`term-${panelId}`);
+    if (!host) return;
+    host.innerHTML = '';
+    t.term.open(host);
+    try { t.fit.fit(); } catch (e) {}
+    t.term.focus();
+  }
+
   socket.on('term_output', (msg) => {
     const t = terms[msg.panel];
-    if (t) t.term.write(msg.data);
+    if (!t) return;
+    showTermIfReady(msg.panel);
+    t.term.write(msg.data);
   });
 
   /* ===== projects strip (top bar) ===== */
@@ -1628,23 +1767,43 @@ body::after {
     const host = document.getElementById('strip-items');
     if (!host) return;
     host.innerHTML = '';
+    // Count how many unique projects are open across all panels
+    const openProjects = new Set(Object.values(panelProject).filter(n => n != null));
     PROJECT_LIST.forEach(p => {
       const chip = document.createElement('div');
       chip.className = 'strip-chip';
       const boundTo = [];
       Object.entries(panelProject).forEach(([pid, name]) => {
-        if (name === p.name) boundTo.push(pid);
+        if (parseInt(pid) < panelCount && name === p.name) boundTo.push(pid);
       });
       if (boundTo.length) chip.classList.add('bound');
       chip.innerHTML = `
         <span class="strip-dot ${p.agent || 'claude'}"></span>
         <span>${escapeHtml(p.name)}</span>
-        ${boundTo.map(b => `<span class="strip-bind">P${b}</span>`).join('')}
+        ${boundTo.map(b => `<span class="strip-bind">CH ${parseInt(b)+1}</span>`).join('')}
+        <button class="strip-x" title="Remove project">×</button>
       `;
       chip.title = `${p.path}\nClick to open in panel ${focusedPanel}`;
-      chip.addEventListener('click', () => rebindPanel(focusedPanel, p.name));
+      chip.querySelector('span:nth-child(2)').addEventListener('click', () => rebindPanel(focusedPanel, p.name));
+      chip.querySelector('.strip-x').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteProject(p.name);
+      });
       host.appendChild(chip);
     });
+    // Update agents stat card with open project count
+    const activeCount = new Set(
+      Object.entries(panelProject)
+        .filter(([pid, name]) => parseInt(pid) < panelCount && name != null)
+        .map(([pid, name]) => name)
+    ).size;
+    document.getElementById('agent-active').textContent = activeCount;
+    const activeNames = [...new Set(
+      Object.entries(panelProject)
+        .filter(([pid, name]) => parseInt(pid) < panelCount && name != null)
+        .map(([pid, name]) => name)
+    )].join(' · ') || 'none';
+    document.getElementById('agent-list').textContent = activeNames;
   }
 
   // strip "+ ADD PROJECT" button: open palette straight to browse mode
@@ -1652,6 +1811,41 @@ body::after {
     openPalette(focusedPanel);
     setTimeout(() => startBrowse(null), 60);
   });
+
+  // Layout switcher (1, 2, 3 panels)
+  let panelCount = 2;
+  const mainEl = document.querySelector('.main');
+  document.getElementById('layout-switch').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const count = parseInt(btn.dataset.count);
+    if (count === panelCount) return;
+    panelCount = count;
+    document.querySelectorAll('#layout-switch button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    mainEl.setAttribute('data-panels', count);
+    // Show/hide panels
+    document.querySelectorAll('.chat-panel').forEach((p, i) => {
+      p.setAttribute('data-hidden', i >= count ? '1' : '0');
+    });
+    // Assign projects to newly visible panels (but don't open terminals yet)
+    for (let i = 0; i < count; i++) {
+      if (!panelProject[i] && PROJECT_LIST[i]) {
+        panelProject[i] = PROJECT_LIST[i].name;
+        applyProjectToPanel(i);
+      }
+    }
+    // Resize existing terminals
+    Object.values(terms).forEach(t => { try { t.fit.fit(); } catch(e) {} });
+    // Re-render strip to update channel badges and open project count
+    renderProjectsStrip();
+  });
+
+  async function deleteProject(name) {
+    if (!confirm(`Remove project "${name}"?`)) return;
+    await fetch(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await refreshProjects();
+  }
 
   /* ===== bootstrap project list ===== */
   async function loadProjects() {
@@ -1735,16 +1929,11 @@ body::after {
     el.innerHTML = parts.join(' ');
   });
 
-  /* ===== command ticker (driven by event log) ===== */
-  const tickerEntries = [];
+  /* ===== latest event display (footer ticker) ===== */
   function pushTicker(type, text) {
-    const stamp = new Date().toLocaleTimeString();
-    tickerEntries.push({ type, text: `[${stamp}] ${text}` });
-    if (tickerEntries.length > 30) tickerEntries.shift();
-    const track = document.getElementById('ticker-track');
-    track.innerHTML = tickerEntries.map(e =>
-      `<span class="t-${e.type}">▸ ${escapeHtml(e.text)}</span>`
-    ).join('');
+    const ticker = document.getElementById('ticker');
+    const stamp = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    ticker.innerHTML = `<span class="ticker-content t-${type}"><span class="ticker-type">${type}</span>[${stamp}] ${escapeHtml(text)}</span>`;
   }
 
   /* ===== project palette (Ctrl+Alt+P) ===== */
@@ -1784,8 +1973,16 @@ body::after {
     palette.form.style.display   = mode === 'form'   ? 'grid' : 'none';
     palette.list.style.display   = mode === 'form'   ? 'none' : '';
     palette.input.style.display  = mode === 'form'   ? 'none' : '';
-    if (mode === 'list') palette.input.placeholder = 'type to filter projects...';
-    if (mode === 'browse') palette.input.placeholder = 'type to filter folders...';
+    const title = document.getElementById('palette-title');
+    if (mode === 'list') {
+      palette.input.placeholder = 'type to filter projects...';
+      title.textContent = '▸ SWITCH PROJECT';
+    } else if (mode === 'browse') {
+      palette.input.placeholder = 'type to filter folders...';
+      title.textContent = '▸ ADD PROJECT · PICK FOLDER';
+    } else if (mode === 'form') {
+      title.textContent = '▸ ADD PROJECT · DETAILS';
+    }
     palette.input.value = '';
     palette.active = 0;
   }
@@ -1869,16 +2066,16 @@ body::after {
     const q = palette.input.value.toLowerCase().trim();
     const entries = (d.entries || []).filter(e => !q || e.name.toLowerCase().includes(q));
     palette.items = [];
-    palette.items.push({ kind: 'use', path: d.path });
     if (d.parent && d.parent !== d.path) palette.items.push({ kind: 'parent', path: d.parent });
     entries.forEach(e => palette.items.push({ kind: 'dir', entry: e }));
+    palette.items.push({ kind: 'use', path: d.path });
     palette.count.textContent = entries.length;
     palette.list.innerHTML = '';
     palette.items.forEach((it, i) => {
       const div = document.createElement('div');
       const activeCls = i === palette.active ? ' active' : '';
       if (it.kind === 'use') {
-        div.className = 'palette-item add-new' + activeCls;
+        div.className = 'palette-item add-new sticky' + activeCls;
         div.innerHTML = `
           <span class="agent-dot" style="background:var(--green);box-shadow:0 0 6px var(--green);"></span>
           <div>
@@ -1952,9 +2149,7 @@ body::after {
       const j = await r.json();
       if (!r.ok) { errEl.textContent = j.error || 'failed'; return; }
       await refreshProjects();
-      setMode('list');
-      renderPalette();
-      setTimeout(() => palette.input.focus(), 10);
+      closePalette();
     } catch (e) {
       errEl.textContent = String(e);
     }
@@ -2172,16 +2367,7 @@ body::after {
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey && e.altKey)) return;
     const k = e.key.toLowerCase();
-    if (k === 's') {
-      e.preventDefault();
-      switchAgent(focusedPanel);
-    } else if (k === 'p') {
-      e.preventDefault();
-      openPalette(focusedPanel);
-    } else if (k === 'l') {
-      e.preventDefault();
-      toggleLog();
-    } else if (k === 'tab' || k === 'arrowright') {
+    if (k === 'tab' || k === 'arrowright') {
       e.preventDefault();
       const next = (focusedPanel + 1) % panels.length;
       focusedPanel = next;
