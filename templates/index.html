@@ -415,45 +415,6 @@ body::after {
 .status-dot.connected { animation: pulse 1.4s ease-in-out infinite; }
 .status-dot.disconnected { background: var(--red); box-shadow: var(--glow-red); animation: none; }
 
-.fuel-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: rgba(5,8,13,0.6);
-  border-bottom: 1px solid var(--border);
-  font-size: 10px;
-  color: var(--text-secondary);
-  letter-spacing: 0.15em;
-  flex-shrink: 0;
-}
-
-.fuel-gauge {
-  flex: 1;
-  height: 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-  position: relative;
-}
-
-.fuel-gauge-bar {
-  height: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--green));
-  width: 0%;
-  transition: width 0.4s ease, background 0.4s ease;
-  box-shadow: 0 0 8px currentColor;
-}
-
-.fuel-pct {
-  font-variant-numeric: tabular-nums;
-  color: var(--cyan);
-  font-weight: 600;
-  min-width: 38px;
-  text-align: right;
-}
-
 /* Terminal */
 .term-host {
   flex: 1;
@@ -1446,11 +1407,6 @@ body::after {
       <span class="git-pill" id="git-0" title="git status">--</span>
       <div class="status-dot disconnected" id="status-0"></div>
     </div>
-    <div class="fuel-row">
-      <span>FUEL</span>
-      <div class="fuel-gauge"><div class="fuel-gauge-bar" id="fuel-0"></div></div>
-      <span class="fuel-pct" id="fuel-pct-0">0%</span>
-    </div>
     <div class="term-host" id="term-0" data-panel="0"></div>
   </div>
 
@@ -1466,11 +1422,6 @@ body::after {
       <span class="git-pill" id="git-1" title="git status">--</span>
       <div class="status-dot disconnected" id="status-1"></div>
     </div>
-    <div class="fuel-row">
-      <span>FUEL</span>
-      <div class="fuel-gauge"><div class="fuel-gauge-bar" id="fuel-1"></div></div>
-      <span class="fuel-pct" id="fuel-pct-1">0%</span>
-    </div>
     <div class="term-host" id="term-1" data-panel="1"></div>
   </div>
 
@@ -1485,11 +1436,6 @@ body::after {
       <span class="panel-project">--</span>
       <span class="git-pill" id="git-2" title="git status">--</span>
       <div class="status-dot disconnected" id="status-2"></div>
-    </div>
-    <div class="fuel-row">
-      <span>FUEL</span>
-      <div class="fuel-gauge"><div class="fuel-gauge-bar" id="fuel-2"></div></div>
-      <span class="fuel-pct" id="fuel-pct-2">0%</span>
     </div>
     <div class="term-host" id="term-2" data-panel="2"></div>
   </div>
@@ -1763,9 +1709,9 @@ body::after {
     t.term.focus();
 
     // Forward mouse wheel to tmux (which has mouse mode on)
+    // Forward mouse wheel to tmux for scrolling
     host.addEventListener('wheel', (e) => {
       e.preventDefault();
-      // SGR mouse encoding for wheel: \x1b[<64;x;yM (up) or \x1b[<65;x;yM (down)
       const btn = e.deltaY < 0 ? 64 : 65;
       const seq = `\x1b[<${btn};1;1M`;
       const count = Math.max(1, Math.abs(Math.round(e.deltaY / 50)));
@@ -2287,20 +2233,6 @@ body::after {
   /* ===== WEATHER ===== */
   socket.on('weather_update', (data) => {
     document.getElementById('weather-display').textContent = data.text || '--';
-  });
-
-  /* ===== TOKENS ===== */
-  socket.on('token_update', (data) => {
-    const bar = document.getElementById(`fuel-${data.panel}`);
-    const pctEl = document.getElementById(`fuel-pct-${data.panel}`);
-    if (bar) {
-      const pct = Math.min(100, Math.max(0, data.percent));
-      bar.style.width = pct + '%';
-      if (pct > 90) bar.style.background = 'linear-gradient(90deg, var(--orange), var(--red))';
-      else if (pct > 70) bar.style.background = 'linear-gradient(90deg, var(--yellow), var(--orange))';
-      else bar.style.background = 'linear-gradient(90deg, var(--cyan), var(--green))';
-      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
-    }
   });
 
   /* ===== EVENT LOG ===== */

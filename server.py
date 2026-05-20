@@ -19,7 +19,6 @@ from launcher.tmux import TmuxManager
 from services.system import SystemService
 from services.weather import WeatherService
 from services.git import GitService
-from services.tokens import TokenTracker
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.urandom(24)
@@ -32,7 +31,7 @@ weather_service = WeatherService()
 git_service = GitService()
 
 # Per-panel state -----------------------------------------------------------
-# sid -> { panel_id: {bridge, project, agent, tokens: TokenTracker} }
+# sid -> { panel_id: {bridge, project, agent} }
 ptys = {}
 # Most recent active project per panel, for git polling
 active_projects = {0: None, 1: None}
@@ -389,23 +388,12 @@ def handle_term_open(data):
         except Exception:
             pass
 
-    tokens = TokenTracker(max_tokens=200_000)
-
-    def on_data(chunk, _sid=sid, _panel=panel, _tokens=tokens):
+    def on_data(chunk, _sid=sid, _panel=panel):
         socketio.emit(
             "term_output",
             {"panel": _panel, "data": chunk.decode("utf-8", errors="replace")},
             to=_sid,
         )
-        # Use streamed bytes as a fuel proxy. Rough but visible.
-        _tokens.update(_tokens.used + len(chunk))
-        status = _tokens.get_status()
-        socketio.emit("token_update", {
-            "panel": _panel,
-            "percent": min(100, status["percent"]),
-            "used": status["used"],
-            "max": status["max"],
-        }, to=_sid)
         try:
             scan_pty_signals(_panel, chunk)
         except Exception:
@@ -417,7 +405,7 @@ def handle_term_open(data):
     bridge = PtyBridge(argv, on_data, rows=rows, cols=cols)
     print(f"[TIMING] term_open PTY BRIDGE created: {_time.time()-t0:.3f}s")
 
-    sid_ptys[panel] = {"bridge": bridge, "project": project_name, "agent": agent, "tokens": tokens}
+    sid_ptys[panel] = {"bridge": bridge, "project": project_name, "agent": agent}
     active_projects[panel] = project_name
     print(f"[TIMING] term_open DONE: {_time.time()-t0:.3f}s")
     emit_event("INFO", f"opened {project_name or '?'} ({agent}) on panel {panel}")
