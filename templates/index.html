@@ -194,7 +194,7 @@ body::after {
 /* ============= STATUS RAIL ============= */
 .status-rail {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
   padding: 8px 16px;
   background: linear-gradient(180deg, rgba(13,20,29,0.6), transparent);
@@ -202,6 +202,7 @@ body::after {
   position: relative;
   z-index: 5;
 }
+@media (max-width: 1400px) { .status-rail { grid-template-columns: repeat(4, 1fr); } }
 
 .stat-card {
   background: linear-gradient(180deg, var(--card), var(--card-2));
@@ -828,6 +829,178 @@ body::after {
   .main { grid-template-columns: 1fr; }
   .radar { display: none; }
 }
+
+/* ============= GIT PILL ============= */
+.git-pill {
+  font-size: 9px;
+  color: var(--text-secondary);
+  letter-spacing: 0.15em;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: rgba(0,217,255,0.04);
+  font-variant-numeric: tabular-nums;
+  margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.git-pill .branch { color: var(--cyan); font-weight: 600; }
+.git-pill .ahead { color: var(--green); }
+.git-pill .behind { color: var(--yellow); }
+.git-pill .dirty { color: var(--orange); }
+.git-pill.clean { border-color: rgba(0,255,136,0.25); }
+.git-pill.dirty-state { border-color: rgba(255,119,51,0.35); }
+
+/* clickable project label */
+.panel-project {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.panel-project:hover { color: var(--cyan); text-shadow: var(--glow-cyan); }
+
+/* ============= COMMAND TICKER ============= */
+.ticker {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  max-width: 480px;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+.ticker-track {
+  display: inline-block;
+  padding-left: 100%;
+  animation: tickerMove 24s linear infinite;
+}
+@keyframes tickerMove {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+.ticker-track span { margin-right: 32px; color: var(--text-secondary); }
+.ticker-track span.t-TOOL { color: var(--yellow); }
+.ticker-track span.t-ERROR { color: var(--red); }
+.ticker-track span.t-THINK { color: var(--cyan); }
+.ticker-track span.t-INFO { color: var(--green); }
+
+/* ============= PROJECT PALETTE ============= */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5,8,13,0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9000;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+}
+.palette-overlay.open { display: flex; }
+
+.palette {
+  width: min(560px, 90vw);
+  background: var(--card);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 6px;
+  box-shadow: 0 8px 60px rgba(0,217,255,0.2), 0 0 0 1px rgba(0,217,255,0.1);
+  overflow: hidden;
+  position: relative;
+}
+.palette::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+}
+.palette-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.palette-header .target {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+.palette-header .target b { color: var(--yellow); }
+.palette-input {
+  width: 100%;
+  background: var(--bg);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  letter-spacing: 0.05em;
+}
+.palette-input::placeholder { color: var(--text-dim); }
+.palette-list {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.palette-item {
+  padding: 8px 14px;
+  font-size: 12px;
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.palette-item:hover, .palette-item.active {
+  background: rgba(0,217,255,0.07);
+  border-left-color: var(--cyan);
+}
+.palette-item .agent-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  justify-self: center;
+}
+.palette-item .agent-dot.opencode { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.palette-item .agent-dot.claude   { background: var(--cyan);  box-shadow: 0 0 6px var(--cyan); }
+.palette-item .agent-dot.codex    { background: var(--magenta);box-shadow: 0 0 6px var(--magenta); }
+.palette-item .pname { font-weight: 600; color: var(--text-primary); }
+.palette-item .ppath { font-size: 10px; color: var(--text-dim); }
+.palette-item .ptag {
+  font-size: 9px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2em;
+  padding: 2px 6px;
+  border: 1px solid var(--border-bright);
+  border-radius: 2px;
+}
+.palette-footer {
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  display: flex;
+  gap: 14px;
+}
+.palette-footer kbd {
+  background: var(--bg);
+  border: 1px solid var(--border-bright);
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: var(--cyan);
+  font-family: inherit;
+  font-size: 9px;
+}
+
 </style>
 </head>
 <body>
@@ -873,6 +1046,14 @@ body::after {
     <div class="stat-value">--%</div>
     <div class="stat-sub" id="disk-sub">--</div>
   </div>
+  <div class="stat-card" id="stat-net">
+    <div class="stat-label">NET <span class="dot"></span></div>
+    <div class="stat-value" style="font-size: 13px; line-height: 1.3;">
+      <span style="color:var(--green);">▼</span> <span id="net-rx">0 B/s</span><br>
+      <span style="color:var(--magenta);">▲</span> <span id="net-tx">0 B/s</span>
+    </div>
+    <div class="sparkline" id="spark-net"></div>
+  </div>
   <div class="stat-card" id="stat-uptime">
     <div class="stat-label">UPTIME <span class="dot"></span></div>
     <div class="stat-value" style="font-size: 14px;">--</div>
@@ -898,6 +1079,7 @@ body::after {
       <div class="agent-icon opencode" data-panel="0" title="Click to cycle agent">&#x1F7E2;</div>
       <span class="panel-project">commandcenter</span>
       <span class="panel-agent-name" id="agent-name-0">opencode</span>
+      <span class="git-pill" id="git-0" title="git status">--</span>
       <div class="status-dot disconnected" id="status-0"></div>
     </div>
     <div class="fuel-row">
@@ -914,6 +1096,7 @@ body::after {
       <div class="agent-icon claude" data-panel="1" title="Click to cycle agent">&#x1F535;</div>
       <span class="panel-project">aws-infra</span>
       <span class="panel-agent-name" id="agent-name-1">claude</span>
+      <span class="git-pill" id="git-1" title="git status">--</span>
       <div class="status-dot disconnected" id="status-1"></div>
     </div>
     <div class="fuel-row">
@@ -928,20 +1111,39 @@ body::after {
 <!-- ============= FOOTER ============= -->
 <footer class="footer">
   <div class="footer-section">
-    <span class="hotkey"><kbd>Ctrl+Alt+S</kbd> CYCLE AGENT</span>
-    <span class="hotkey"><kbd>Ctrl+Alt+Tab</kbd> SWITCH PANEL</span>
-    <span class="hotkey"><kbd>Ctrl+Alt+L</kbd> EVENT LOG</span>
-    <span class="hotkey">CLICK TERM TO TYPE</span>
+    <span class="hotkey"><kbd>Ctrl+Alt+P</kbd> PROJECTS</span>
+    <span class="hotkey"><kbd>Ctrl+Alt+S</kbd> AGENT</span>
+    <span class="hotkey"><kbd>Ctrl+Alt+L</kbd> LOG</span>
   </div>
+  <div class="ticker"><div class="ticker-track" id="ticker-track"><span>// commandcenter online · awaiting telemetry stream...</span></div></div>
   <div class="footer-section">
     <span class="event-counter" id="event-log-toggle">EVENTS · <span id="event-counter-num">0</span></span>
     <span id="conn-detail">SOCKET · ESTABLISHED</span>
-    <span>BUILD 1.0.0</span>
+    <span id="tmux-status">TMUX · ?</span>
+    <span>BUILD 1.1.0</span>
   </div>
 </footer>
 
 <!-- radar -->
 <div class="radar"><div class="radar-dot"></div></div>
+
+<!-- project palette overlay -->
+<div class="palette-overlay" id="palette-overlay">
+  <div class="palette" role="dialog" aria-label="project palette">
+    <div class="palette-header">
+      <span>▸ SWITCH PROJECT</span>
+      <span class="target">PANEL <b id="palette-target">--</b></span>
+    </div>
+    <input class="palette-input" id="palette-input" placeholder="type to filter projects..." autocomplete="off">
+    <div class="palette-list" id="palette-list"></div>
+    <div class="palette-footer">
+      <span><kbd>↑↓</kbd> NAV</span>
+      <span><kbd>↵</kbd> OPEN</span>
+      <span><kbd>ESC</kbd> CLOSE</span>
+      <span style="margin-left:auto;">PROJECTS · <span id="palette-count">0</span></span>
+    </div>
+  </div>
+</div>
 
 <!-- event log popover -->
 <div class="event-log" id="event-log">
@@ -1013,8 +1215,9 @@ body::after {
       c.appendChild(bar);
     }
   }
-  for (let i = 0; i < SPARK_LEN; i++) { sparkData.cpu.push(0); sparkData.ram.push(0); }
-  renderSpark('cpu'); renderSpark('ram');
+  sparkData.net = [];
+  for (let i = 0; i < SPARK_LEN; i++) { sparkData.cpu.push(0); sparkData.ram.push(0); sparkData.net.push(0); }
+  renderSpark('cpu'); renderSpark('ram'); renderSpark('net');
 
   /* ===== AGENTS ===== */
   const AGENTS = [
@@ -1055,7 +1258,10 @@ body::after {
   });
 
   /* ===== TERMINALS (xterm.js + PTY bridge) ===== */
-  const PROJECTS = ['commandcenter', 'aws-infra'];
+  // Will be filled from /api/projects. First two become the initial panel slots.
+  let PROJECT_LIST = [];
+  // Per panel: which project name currently bound
+  const panelProject = { 0: null, 1: null };
   const terms = {};
 
   const TERM_THEME = {
@@ -1108,9 +1314,10 @@ body::after {
 
     terms[panelId] = { term, fit };
 
+    const proj = panelProject[panelId];
     socket.emit('term_open', {
       panel: panelId,
-      project: PROJECTS[panelId],
+      project: proj,
       agent: AGENTS[panels[panelId].agentIdx].name,
       rows: term.rows,
       cols: term.cols,
@@ -1127,14 +1334,191 @@ body::after {
     if (t) t.term.write(msg.data);
   });
 
-  // open both panels once socket connects
-  let opened = false;
-  socket.on('connect', () => {
-    if (!opened) {
-      opened = true;
-      panels.forEach(p => openTerm(p.id));
+  /* ===== bootstrap project list ===== */
+  async function loadProjects() {
+    try {
+      const r = await fetch('/api/projects');
+      const j = await r.json();
+      PROJECT_LIST = j.projects || [];
+      document.getElementById('tmux-status').textContent = 'TMUX · ' + (j.tmux ? 'ON' : 'OFF');
+      // Initial panel bindings: first two projects, or whatever is available
+      panelProject[0] = PROJECT_LIST[0] ? PROJECT_LIST[0].name : null;
+      panelProject[1] = PROJECT_LIST[1] ? PROJECT_LIST[1].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
+      applyProjectToPanel(0);
+      applyProjectToPanel(1);
+    } catch (e) {
+      console.error('loadProjects failed', e);
+    }
+  }
+
+  function applyProjectToPanel(panelId) {
+    const name = panelProject[panelId];
+    const proj = PROJECT_LIST.find(p => p.name === name);
+    const projEl = document.querySelector(`#panel-${panelId} .panel-project`);
+    if (projEl) projEl.textContent = name || 'no project';
+    if (proj) {
+      // sync agent icon to project's saved agent
+      const idx = AGENTS.findIndex(a => a.name === (proj.agent || 'claude'));
+      if (idx >= 0) {
+        panels[panelId].agentIdx = idx;
+        const icon = document.querySelector(`#panel-${panelId} .agent-icon`);
+        icon.textContent = AGENTS[idx].emoji;
+        icon.className = `agent-icon ${AGENTS[idx].cls}`;
+        icon.dataset.panel = panelId;
+        document.getElementById(`agent-name-${panelId}`).textContent = AGENTS[idx].name;
+      }
+    }
+  }
+
+  function rebindPanel(panelId, projectName) {
+    panelProject[panelId] = projectName;
+    applyProjectToPanel(panelId);
+    socket.emit('term_close', { panel: panelId });
+    openTerm(panelId);
+    document.getElementById('agent-list').textContent =
+      panels.map(p => `${panelProject[p.id] || '?'}:${AGENTS[p.agentIdx].name}`).join(' · ');
+  }
+
+  /* ===== network sparkline ===== */
+  function fmtBytes(bps) {
+    if (bps < 1024) return Math.round(bps) + ' B/s';
+    if (bps < 1024*1024) return (bps/1024).toFixed(1) + ' KB/s';
+    return (bps/1024/1024).toFixed(2) + ' MB/s';
+  }
+  let netMax = 1;
+  socket.on('network_update', d => {
+    document.getElementById('net-rx').textContent = fmtBytes(d.rx_bps);
+    document.getElementById('net-tx').textContent = fmtBytes(d.tx_bps);
+    const sum = d.rx_bps + d.tx_bps;
+    netMax = Math.max(netMax * 0.95, sum, 1);
+    sparkData.net.push((sum / netMax) * 100);
+    sparkData.net.shift();
+    renderSpark('net');
+  });
+
+  /* ===== git pill ===== */
+  socket.on('git_update', msg => {
+    const el = document.getElementById(`git-${msg.panel}`);
+    if (!el) return;
+    if (!msg.git) {
+      el.textContent = '—';
+      el.className = 'git-pill';
+      return;
+    }
+    const g = msg.git;
+    el.className = 'git-pill ' + (g.dirty ? 'dirty-state' : 'clean');
+    const parts = [`<span class="branch">${escapeHtml(g.branch || '?')}</span>`];
+    if (g.ahead) parts.push(`<span class="ahead">↑${g.ahead}</span>`);
+    if (g.behind) parts.push(`<span class="behind">↓${g.behind}</span>`);
+    if (g.dirty) parts.push(`<span class="dirty">●</span>`);
+    el.innerHTML = parts.join(' ');
+  });
+
+  /* ===== command ticker (driven by event log) ===== */
+  const tickerEntries = [];
+  function pushTicker(type, text) {
+    const stamp = new Date().toLocaleTimeString();
+    tickerEntries.push({ type, text: `[${stamp}] ${text}` });
+    if (tickerEntries.length > 30) tickerEntries.shift();
+    const track = document.getElementById('ticker-track');
+    track.innerHTML = tickerEntries.map(e =>
+      `<span class="t-${e.type}">▸ ${escapeHtml(e.text)}</span>`
+    ).join('');
+  }
+
+  /* ===== project palette (Ctrl+Alt+P) ===== */
+  const palette = {
+    overlay: document.getElementById('palette-overlay'),
+    input: document.getElementById('palette-input'),
+    list: document.getElementById('palette-list'),
+    target: document.getElementById('palette-target'),
+    count: document.getElementById('palette-count'),
+    panel: 0,
+    active: 0,
+    filtered: [],
+  };
+  function openPalette(panelId) {
+    palette.panel = panelId;
+    palette.target.textContent = String(panelId);
+    palette.input.value = '';
+    palette.active = 0;
+    palette.overlay.classList.add('open');
+    renderPalette();
+    setTimeout(() => palette.input.focus(), 30);
+  }
+  function closePalette() {
+    palette.overlay.classList.remove('open');
+  }
+  function renderPalette() {
+    const q = palette.input.value.toLowerCase().trim();
+    palette.filtered = PROJECT_LIST.filter(p =>
+      !q || p.name.toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q)
+    );
+    palette.count.textContent = palette.filtered.length;
+    palette.list.innerHTML = '';
+    palette.filtered.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'palette-item' + (i === palette.active ? ' active' : '');
+      div.innerHTML = `
+        <span class="agent-dot ${p.agent || 'claude'}"></span>
+        <div>
+          <div class="pname">${escapeHtml(p.name)}</div>
+          <div class="ppath">${escapeHtml(p.path || '')}</div>
+        </div>
+        <span class="ptag">${escapeHtml((p.agent||'claude').toUpperCase())}</span>
+      `;
+      div.addEventListener('click', () => {
+        palette.active = i;
+        confirmPalette();
+      });
+      palette.list.appendChild(div);
+    });
+  }
+  function confirmPalette() {
+    const choice = palette.filtered[palette.active];
+    if (!choice) return;
+    closePalette();
+    rebindPanel(palette.panel, choice.name);
+  }
+  palette.input.addEventListener('input', () => { palette.active = 0; renderPalette(); });
+  palette.input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+    else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      palette.active = Math.min(palette.filtered.length - 1, palette.active + 1);
+      renderPalette();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      palette.active = Math.max(0, palette.active - 1);
+      renderPalette();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      confirmPalette();
     }
   });
+  palette.overlay.addEventListener('click', e => {
+    if (e.target === palette.overlay) closePalette();
+  });
+
+  // panel project label click -> open palette for that panel
+  document.querySelectorAll('.panel-project').forEach(el => {
+    el.addEventListener('click', () => {
+      const panel = parseInt(el.closest('.chat-panel').id.split('-')[1]);
+      openPalette(panel);
+    });
+  });
+
+  // open both panels once socket connects + projects loaded
+  let opened = false;
+  async function maybeBoot() {
+    if (opened) return;
+    if (!PROJECT_LIST.length) return;
+    if (!socket.connected) return;
+    opened = true;
+    panels.forEach(p => openTerm(p.id));
+  }
+  socket.on('connect', maybeBoot);
+  loadProjects().then(maybeBoot);
 
   // refit on window resize
   window.addEventListener('resize', () => {
@@ -1203,6 +1587,7 @@ body::after {
     renderEvents();
     document.getElementById('ev-count').textContent = events.length;
     document.getElementById('ev-last').textContent = entry.message.slice(0, 32);
+    pushTicker(entry.type, entry.message);
   });
 
   function renderEvents() {
@@ -1247,7 +1632,13 @@ body::after {
     document.getElementById(`agent-name-${panelId}`).textContent = agent.name;
     document.getElementById('agent-list').textContent =
       panels.map(p => AGENTS[p.agentIdx].name).join(' · ');
-    // tell the server to swap the underlying PTY to the new agent
+    // persist on server side if we know the project
+    const projName = panelProject[panelId];
+    if (projName) {
+      // server will cycle in its own order — we cycle locally too; reload to sync
+      socket.emit('agent_switch', { project: projName, panel: panelId });
+    }
+    // swap PTY to new agent
     socket.emit('term_close', { panel: panelId });
     openTerm(panelId);
   }
@@ -1273,6 +1664,9 @@ body::after {
     if (k === 's') {
       e.preventDefault();
       switchAgent(focusedPanel);
+    } else if (k === 'p') {
+      e.preventDefault();
+      openPalette(focusedPanel);
     } else if (k === 'l') {
       e.preventDefault();
       toggleLog();
