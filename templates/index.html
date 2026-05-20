@@ -55,7 +55,7 @@ body {
   line-height: 1.5;
   height: 100vh;
   display: grid;
-  grid-template-rows: 52px auto 1fr 34px;
+  grid-template-rows: 52px auto auto 1fr 34px;
   overflow: hidden;
   letter-spacing: 0.02em;
 }
@@ -830,6 +830,151 @@ body::after {
   .radar { display: none; }
 }
 
+/* ============= PROJECTS STRIP ============= */
+.projects-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(13,20,29,0.4), transparent);
+  overflow-x: auto;
+  position: relative;
+  z-index: 5;
+}
+
+.projects-strip .strip-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+  margin-right: 4px;
+}
+
+.strip-items {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.strip-items::-webkit-scrollbar { height: 3px; }
+.strip-items::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+.strip-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+.strip-chip:hover {
+  border-color: var(--cyan-dim);
+  background: rgba(0,217,255,0.06);
+}
+.strip-chip .strip-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px currentColor;
+}
+.strip-chip .strip-dot.opencode { background: var(--green); color: var(--green); }
+.strip-chip .strip-dot.claude   { background: var(--cyan);  color: var(--cyan); }
+.strip-chip .strip-dot.codex    { background: var(--magenta);color: var(--magenta); }
+.strip-chip .strip-bind {
+  font-size: 9px;
+  color: var(--yellow);
+  letter-spacing: 0.15em;
+  padding: 1px 4px;
+  border: 1px solid rgba(255,170,0,0.35);
+  border-radius: 2px;
+  margin-left: 4px;
+}
+.strip-chip.bound {
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0,217,255,0.2);
+}
+
+.strip-add {
+  flex-shrink: 0;
+  background: linear-gradient(180deg, rgba(0,255,136,0.15), rgba(0,255,136,0.05));
+  border: 1px solid rgba(0,255,136,0.4);
+  color: var(--green);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 7px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  text-shadow: 0 0 6px rgba(0,255,136,0.4);
+}
+.strip-add:hover {
+  background: rgba(0,255,136,0.18);
+  box-shadow: 0 0 12px rgba(0,255,136,0.3);
+}
+
+/* ============= AGENT CYCLE BUTTON ============= */
+.agent-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  background: var(--card);
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.agent-btn:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(0,217,255,0.2);
+  color: var(--text-primary);
+}
+.agent-btn .a-glyph {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}
+.agent-btn.opencode { color: var(--green); }
+.agent-btn.claude   { color: var(--cyan); }
+.agent-btn.codex    { color: var(--magenta); }
+.agent-btn .a-name { font-weight: 700; }
+.agent-btn .a-cycle {
+  font-size: 13px;
+  color: var(--text-dim);
+  transition: transform 0.3s ease;
+  margin-left: 2px;
+}
+.agent-btn:hover .a-cycle {
+  transform: rotate(120deg);
+  color: var(--cyan);
+}
+
 /* ============= GIT PILL ============= */
 .git-pill {
   font-size: 11px;
@@ -1178,14 +1323,24 @@ body::after {
   </div>
 </div>
 
+<!-- ============= PROJECTS STRIP ============= -->
+<div class="projects-strip">
+  <div class="strip-label">▣ PROJECTS</div>
+  <div class="strip-items" id="strip-items"></div>
+  <button class="strip-add" id="strip-add">＋ ADD PROJECT</button>
+</div>
+
 <!-- ============= MAIN ============= -->
 <main class="main">
   <div class="chat-panel" id="panel-0" tabindex="0">
     <div class="panel-header">
       <span class="panel-tag">CH 01</span>
-      <div class="agent-icon opencode" data-panel="0" title="Click to cycle agent">&#x1F7E2;</div>
+      <button class="agent-btn opencode" data-panel="0" id="agent-btn-0" title="Click to cycle agent · Ctrl+Alt+S">
+        <span class="a-glyph">&#x1F7E2;</span>
+        <span class="a-name" id="agent-name-0">opencode</span>
+        <span class="a-cycle">↻</span>
+      </button>
       <span class="panel-project">commandcenter</span>
-      <span class="panel-agent-name" id="agent-name-0">opencode</span>
       <span class="git-pill" id="git-0" title="git status">--</span>
       <div class="status-dot disconnected" id="status-0"></div>
     </div>
@@ -1200,9 +1355,12 @@ body::after {
   <div class="chat-panel" id="panel-1" tabindex="0">
     <div class="panel-header">
       <span class="panel-tag">CH 02</span>
-      <div class="agent-icon claude" data-panel="1" title="Click to cycle agent">&#x1F535;</div>
+      <button class="agent-btn claude" data-panel="1" id="agent-btn-1" title="Click to cycle agent · Ctrl+Alt+S">
+        <span class="a-glyph">&#x1F535;</span>
+        <span class="a-name" id="agent-name-1">claude</span>
+        <span class="a-cycle">↻</span>
+      </button>
       <span class="panel-project">aws-infra</span>
-      <span class="panel-agent-name" id="agent-name-1">claude</span>
       <span class="git-pill" id="git-1" title="git status">--</span>
       <div class="status-dot disconnected" id="status-1"></div>
     </div>
@@ -1465,6 +1623,36 @@ body::after {
     if (t) t.term.write(msg.data);
   });
 
+  /* ===== projects strip (top bar) ===== */
+  function renderProjectsStrip() {
+    const host = document.getElementById('strip-items');
+    if (!host) return;
+    host.innerHTML = '';
+    PROJECT_LIST.forEach(p => {
+      const chip = document.createElement('div');
+      chip.className = 'strip-chip';
+      const boundTo = [];
+      Object.entries(panelProject).forEach(([pid, name]) => {
+        if (name === p.name) boundTo.push(pid);
+      });
+      if (boundTo.length) chip.classList.add('bound');
+      chip.innerHTML = `
+        <span class="strip-dot ${p.agent || 'claude'}"></span>
+        <span>${escapeHtml(p.name)}</span>
+        ${boundTo.map(b => `<span class="strip-bind">P${b}</span>`).join('')}
+      `;
+      chip.title = `${p.path}\nClick to open in panel ${focusedPanel}`;
+      chip.addEventListener('click', () => rebindPanel(focusedPanel, p.name));
+      host.appendChild(chip);
+    });
+  }
+
+  // strip "+ ADD PROJECT" button: open palette straight to browse mode
+  document.getElementById('strip-add').addEventListener('click', () => {
+    openPalette(focusedPanel);
+    setTimeout(() => startBrowse(null), 60);
+  });
+
   /* ===== bootstrap project list ===== */
   async function loadProjects() {
     try {
@@ -1477,6 +1665,7 @@ body::after {
       panelProject[1] = PROJECT_LIST[1] ? PROJECT_LIST[1].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
       applyProjectToPanel(0);
       applyProjectToPanel(1);
+      renderProjectsStrip();
     } catch (e) {
       console.error('loadProjects failed', e);
     }
@@ -1488,17 +1677,17 @@ body::after {
     const projEl = document.querySelector(`#panel-${panelId} .panel-project`);
     if (projEl) projEl.textContent = name || 'no project';
     if (proj) {
-      // sync agent icon to project's saved agent
       const idx = AGENTS.findIndex(a => a.name === (proj.agent || 'claude'));
       if (idx >= 0) {
         panels[panelId].agentIdx = idx;
-        const icon = document.querySelector(`#panel-${panelId} .agent-icon`);
-        icon.textContent = AGENTS[idx].emoji;
-        icon.className = `agent-icon ${AGENTS[idx].cls}`;
-        icon.dataset.panel = panelId;
+        const btn = document.getElementById(`agent-btn-${panelId}`);
+        btn.querySelector('.a-glyph').textContent = AGENTS[idx].emoji;
+        btn.className = `agent-btn ${AGENTS[idx].cls}`;
+        btn.dataset.panel = panelId;
         document.getElementById(`agent-name-${panelId}`).textContent = AGENTS[idx].name;
       }
     }
+    renderProjectsStrip();
   }
 
   function rebindPanel(panelId, projectName) {
@@ -1508,6 +1697,7 @@ body::after {
     openTerm(panelId);
     document.getElementById('agent-list').textContent =
       panels.map(p => `${panelProject[p.id] || '?'}:${AGENTS[p.agentIdx].name}`).join(' · ');
+    renderProjectsStrip();
   }
 
   /* ===== network sparkline ===== */
@@ -1620,7 +1810,7 @@ body::after {
         div.innerHTML = `
           <span class="agent-dot" style="background:var(--green);box-shadow:0 0 6px var(--green);"></span>
           <div>
-            <div class="pname">+ NEW PROJECT</div>
+            <div class="pname">+ ADD PROJECT</div>
             <div class="ppath">browse a folder and add it to the dashboard</div>
           </div>
           <span class="ptag" style="color:var(--green);border-color:rgba(0,255,136,0.4);">ADD</span>
@@ -1741,7 +1931,8 @@ body::after {
     setTimeout(() => palette.input.focus(), 10);
   });
   document.getElementById('pf-save').addEventListener('click', saveNewProject);
-  document.getElementById('pf-name').addEventListener('keydown', e => {
+  // Enter or Esc from anywhere inside the form
+  document.getElementById('palette-form').addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); saveNewProject(); }
     if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
   });
@@ -1773,6 +1964,7 @@ body::after {
     const r = await fetch('/api/projects');
     const j = await r.json();
     PROJECT_LIST = j.projects || [];
+    renderProjectsStrip();
   }
 
   // ===== universal item commit =====
@@ -1944,10 +2136,10 @@ body::after {
     const p = panels[panelId];
     p.agentIdx = (p.agentIdx + 1) % AGENTS.length;
     const agent = AGENTS[p.agentIdx];
-    const icon = document.querySelector(`#panel-${panelId} .agent-icon`);
-    icon.textContent = agent.emoji;
-    icon.className = `agent-icon ${agent.cls}`;
-    icon.dataset.panel = panelId;
+    const btn = document.getElementById(`agent-btn-${panelId}`);
+    btn.querySelector('.a-glyph').textContent = agent.emoji;
+    btn.className = `agent-btn ${agent.cls}`;
+    btn.dataset.panel = panelId;
     document.getElementById(`agent-name-${panelId}`).textContent = agent.name;
     document.getElementById('agent-list').textContent =
       panels.map(p => AGENTS[p.agentIdx].name).join(' · ');
@@ -1962,7 +2154,7 @@ body::after {
     openTerm(panelId);
   }
 
-  document.querySelectorAll('.agent-icon').forEach(el => {
+  document.querySelectorAll('.agent-btn').forEach(el => {
     el.addEventListener('click', () => switchAgent(parseInt(el.dataset.panel)));
   });
 

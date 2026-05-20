@@ -294,7 +294,10 @@ def handle_term_open(data):
         cwd = os.getcwd()
 
     agent_cmd = agent if agent in AGENT_CYCLE else "claude"
-    session = f"cc-{project_name or 'panel'+str(panel)}"
+    # Session name includes the agent so switching agents keeps each
+    # one's tmux session alive in the background. Switching back
+    # re-attaches to the existing session rather than starting fresh.
+    session = f"cc-{project_name or 'panel'+str(panel)}-{agent_cmd}"
 
     if tmux.is_available():
         shell_cmd = (
