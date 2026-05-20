@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ COMMANDCENTER</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #05080d;
+  --bg-2: #0a0f17;
+  --card: #0d141d;
+  --card-2: #121a25;
+  --border: #1f2a3a;
+  --border-bright: #2a3a52;
+  --grid: rgba(0, 217, 255, 0.04);
+  --text-primary: #d8e4f0;
+  --text-secondary: #5f7388;
+  --text-dim: #3a4a5e;
+  --cyan: #00d9ff;
+  --cyan-dim: #0090ad;
+  --green: #00ff88;
+  --green-dim: #00aa55;
+  --yellow: #ffaa00;
+  --orange: #ff7733;
+  --red: #ff4466;
+  --magenta: #ff33aa;
+  --purple: #aa55ff;
+  --radius: 4px;
+  --shadow: 0 2px 12px rgba(0,217,255,0.05);
+  --shadow-lg: 0 4px 24px rgba(0,217,255,0.12);
+  --glow-cyan: 0 0 8px rgba(0,217,255,0.6);
+  --glow-green: 0 0 8px rgba(0,255,136,0.6);
+  --glow-red: 0 0 8px rgba(255,68,102,0.7);
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: 'JetBrains Mono', 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
+  background: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    radial-gradient(ellipse at top, rgba(0,217,255,0.05), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(170,85,255,0.04), transparent 60%);
+  background-size: 32px 32px, 32px 32px, 100% 100%, 100% 100%;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 44px auto 1fr 28px;
+  overflow: hidden;
+  letter-spacing: 0.02em;
+}
+
+/* CRT scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 2px,
+    rgba(0,0,0,0.12) 3px,
+    rgba(0,0,0,0) 4px
+  );
+  pointer-events: none;
+  z-index: 9998;
+  mix-blend-mode: multiply;
+  opacity: 0.45;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.5) 100%);
+  pointer-events: none;
+  z-index: 9997;
+}
+
+/* ============= HEADER ============= */
+.header {
+  height: 44px;
+  background: linear-gradient(180deg, var(--card-2), var(--card));
+  border-bottom: 1px solid var(--border-bright);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 16px;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 1px 0 rgba(0,217,255,0.08), 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0.4;
+}
+
+.header-left, .header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.header-right { justify-content: flex-end; }
+
+.brand {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  letter-spacing: 0.25em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-bolt { animation: flicker 4s infinite; }
+@keyframes flicker {
+  0%, 92%, 100% { opacity: 1; }
+  93% { opacity: 0.3; }
+  95% { opacity: 1; }
+  96% { opacity: 0.4; }
+  97% { opacity: 1; }
+}
+
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: var(--glow-green);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.live-dot.offline {
+  background: var(--red);
+  box-shadow: var(--glow-red);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+
+.clock {
+  color: var(--cyan);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  text-shadow: 0 0 6px rgba(0,217,255,0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+.header-pill {
+  padding: 3px 10px;
+  border: 1px solid var(--border-bright);
+  border-radius: 2px;
+  background: rgba(0,217,255,0.04);
+  font-size: 10px;
+  color: var(--text-primary);
+  letter-spacing: 0.15em;
+}
+
+.header-pill .label { color: var(--text-secondary); margin-right: 6px; }
+
+#weather-display { color: var(--yellow); }
+.greeting { color: var(--text-primary); font-weight: 600; }
+
+/* ============= STATUS RAIL ============= */
+.status-rail {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(180deg, rgba(13,20,29,0.6), transparent);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 5;
+}
+
+.stat-card {
+  background: linear-gradient(180deg, var(--card), var(--card-2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 8px; height: 8px;
+  border-top: 1px solid var(--cyan-dim);
+  border-left: 1px solid var(--cyan-dim);
+}
+.stat-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 8px; height: 8px;
+  border-bottom: 1px solid var(--cyan-dim);
+  border-right: 1px solid var(--cyan-dim);
+}
+
+.stat-card:hover {
+  border-color: var(--border-bright);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.stat-card.warn { border-color: rgba(255,170,0,0.4); }
+.stat-card.warn::before, .stat-card.warn::after { border-color: var(--yellow); }
+.stat-card.warn .stat-value { color: var(--yellow); text-shadow: 0 0 6px rgba(255,170,0,0.5); }
+
+.stat-card.crit { border-color: rgba(255,68,102,0.5); animation: critBlink 1.2s ease-in-out infinite; }
+.stat-card.crit::before, .stat-card.crit::after { border-color: var(--red); }
+.stat-card.crit .stat-value { color: var(--red); text-shadow: var(--glow-red); }
+
+@keyframes critBlink {
+  0%, 100% { box-shadow: 0 0 0 rgba(255,68,102,0); }
+  50% { box-shadow: 0 0 14px rgba(255,68,102,0.4); }
+}
+
+.stat-label {
+  font-size: 9px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.stat-label .dot {
+  width: 5px; height: 5px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: var(--glow-green);
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--green);
+  text-shadow: var(--glow-green);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.stat-sub {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  letter-spacing: 0.05em;
+}
+
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  margin-top: 4px;
+}
+
+.sparkline .bar {
+  flex: 1;
+  background: linear-gradient(180deg, var(--cyan), var(--cyan-dim));
+  border-radius: 1px;
+  min-height: 1px;
+  opacity: 0.85;
+  transition: height 0.3s ease;
+}
+
+.stat-card.warn .sparkline .bar { background: linear-gradient(180deg, var(--yellow), var(--orange)); }
+.stat-card.crit .sparkline .bar { background: linear-gradient(180deg, var(--red), #aa1133); }
+
+/* ============= MAIN PANELS ============= */
+.main {
+  padding: 8px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  position: relative;
+  z-index: 4;
+}
+
+.chat-panel {
+  background: linear-gradient(180deg, var(--card), var(--bg-2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.3s ease;
+}
+
+.chat-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0.5;
+}
+
+.chat-panel:focus-within {
+  border-color: var(--cyan-dim);
+  box-shadow: var(--shadow-lg);
+}
+
+.panel-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  background: rgba(13,20,29,0.6);
+}
+
+.panel-tag {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.agent-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  border: 1px solid var(--border-bright);
+}
+
+.agent-icon:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 14px currentColor;
+}
+
+.agent-icon.opencode { background: rgba(0,255,136,0.1); color: var(--green); border-color: rgba(0,255,136,0.3); }
+.agent-icon.claude   { background: rgba(0,217,255,0.1); color: var(--cyan); border-color: rgba(0,217,255,0.3); }
+.agent-icon.codex    { background: rgba(255,51,170,0.1); color: var(--magenta); border-color: rgba(255,51,170,0.3); }
+
+.panel-project {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+}
+
+.panel-agent-name {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-left: 4px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-left: auto;
+  box-shadow: var(--glow-green);
+}
+
+.status-dot.connected { animation: pulse 1.4s ease-in-out infinite; }
+.status-dot.disconnected { background: var(--red); box-shadow: var(--glow-red); animation: none; }
+
+.fuel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(5,8,13,0.6);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.15em;
+  flex-shrink: 0;
+}
+
+.fuel-gauge {
+  flex: 1;
+  height: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.fuel-gauge-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  width: 0%;
+  transition: width 0.4s ease, background 0.4s ease;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.fuel-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--cyan);
+  font-weight: 600;
+  min-width: 38px;
+  text-align: right;
+}
+
+/* Terminal */
+.term-host {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 8px 4px;
+  background: #05080d;
+  position: relative;
+}
+.term-host .xterm { height: 100%; }
+.term-host .xterm-viewport { background: transparent !important; }
+.term-host .xterm-viewport::-webkit-scrollbar { width: 4px; }
+.term-host .xterm-viewport::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* Messages */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  background:
+    linear-gradient(180deg, rgba(0,217,255,0.02), transparent 20%);
+}
+
+.messages::-webkit-scrollbar { width: 4px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+.message {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.5;
+  animation: msgIn 0.25s ease;
+  position: relative;
+  word-wrap: break-word;
+}
+
+.message::before {
+  content: attr(data-prefix);
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message.user {
+  align-self: flex-end;
+  background: linear-gradient(180deg, rgba(0,217,255,0.1), rgba(0,217,255,0.05));
+  color: var(--cyan);
+  border: 1px solid rgba(0,217,255,0.25);
+}
+
+.message.ai {
+  align-self: flex-start;
+  background: rgba(255,255,255,0.02);
+  color: var(--text-primary);
+  border-left: 2px solid var(--cyan);
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.message.ai .cursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: var(--cyan);
+  animation: blink 0.8s steps(2) infinite;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  box-shadow: var(--glow-cyan);
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* Input */
+.chat-input-area {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  background: rgba(5,8,13,0.7);
+  align-items: center;
+}
+
+.prompt-glyph {
+  color: var(--cyan);
+  font-weight: 700;
+  text-shadow: var(--glow-cyan);
+  font-size: 14px;
+}
+
+.chat-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  letter-spacing: 0.03em;
+}
+
+.chat-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0,217,255,0.3), inset 0 0 8px rgba(0,217,255,0.08);
+}
+
+.chat-input::placeholder { color: var(--text-dim); }
+
+.send-btn {
+  background: linear-gradient(180deg, var(--cyan), var(--cyan-dim));
+  border: none;
+  border-radius: 2px;
+  padding: 6px 14px;
+  color: var(--bg);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  box-shadow: 0 0 12px rgba(0,217,255,0.3);
+}
+
+.send-btn:hover { filter: brightness(1.15); box-shadow: 0 0 16px rgba(0,217,255,0.5); }
+.send-btn:active { transform: scale(0.95); }
+
+/* ============= FOOTER ============= */
+.footer {
+  background: linear-gradient(180deg, var(--card), var(--card-2));
+  border-top: 1px solid var(--border-bright);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 10;
+  gap: 14px;
+}
+
+.footer::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0.3;
+}
+
+.footer-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hotkey {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hotkey kbd {
+  background: var(--bg);
+  border: 1px solid var(--border-bright);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-size: 9px;
+  color: var(--cyan);
+  font-family: inherit;
+  letter-spacing: 0;
+}
+
+.event-counter {
+  color: var(--yellow);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.event-counter:hover { color: var(--cyan); }
+
+/* ============= EVENT LOG POPOVER ============= */
+.event-log {
+  position: fixed;
+  bottom: 36px;
+  left: 16px;
+  right: 16px;
+  max-height: 240px;
+  background: var(--card);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  overflow: hidden;
+  z-index: 80;
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(0,217,255,0.1);
+  display: none;
+  flex-direction: column;
+}
+
+.event-log.open { display: flex; }
+
+.event-log-header {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cyan);
+  background: var(--card-2);
+  letter-spacing: 0.25em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.event-log-header .close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0 4px;
+}
+.event-log-header .close-btn:hover { color: var(--red); }
+
+.event-log-entries {
+  padding: 6px 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.event-entry {
+  display: grid;
+  grid-template-columns: 70px 70px 1fr;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 11px;
+  color: var(--text-primary);
+  align-items: center;
+  border-bottom: 1px dashed transparent;
+  animation: msgIn 0.15s ease;
+}
+
+.event-entry + .event-entry { border-top: 1px dashed rgba(255,255,255,0.02); }
+
+.event-time {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.event-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.15em;
+}
+
+.event-badge.TOOL  { background: rgba(255,170,0,0.15);  color: var(--yellow); border: 1px solid rgba(255,170,0,0.3); }
+.event-badge.THINK { background: rgba(0,217,255,0.15);  color: var(--cyan);   border: 1px solid rgba(0,217,255,0.3); }
+.event-badge.ERROR { background: rgba(255,68,102,0.15); color: var(--red);    border: 1px solid rgba(255,68,102,0.3); }
+.event-badge.INFO  { background: rgba(0,255,136,0.15);  color: var(--green);  border: 1px solid rgba(0,255,136,0.3); }
+
+/* ============= BOOT SEQUENCE ============= */
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  font-family: inherit;
+  color: var(--green);
+  font-size: 12px;
+  padding: 40px;
+  letter-spacing: 0.1em;
+}
+
+.boot-overlay.done { animation: bootFade 0.4s ease forwards; }
+@keyframes bootFade {
+  to { opacity: 0; visibility: hidden; }
+}
+
+.boot-logo {
+  font-size: 14px;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  margin-bottom: 20px;
+  letter-spacing: 0.4em;
+  font-weight: 700;
+}
+
+.boot-lines {
+  width: 100%;
+  max-width: 560px;
+}
+
+.boot-line {
+  opacity: 0;
+  animation: bootLine 0.3s ease forwards;
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.boot-line .ok { color: var(--green); }
+.boot-line .label { color: var(--text-secondary); }
+
+@keyframes bootLine {
+  to { opacity: 1; }
+}
+
+/* radar pulse, corner */
+.radar {
+  position: fixed;
+  bottom: 40px;
+  right: 18px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 1px solid var(--cyan-dim);
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.35;
+}
+.radar::before, .radar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--cyan);
+  animation: radarPulse 2.4s linear infinite;
+}
+.radar::after { animation-delay: 1.2s; }
+@keyframes radarPulse {
+  0% { transform: scale(0.2); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+.radar-dot {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 5px; height: 5px;
+  background: var(--cyan);
+  border-radius: 50%;
+  transform: translate(-50%,-50%);
+  box-shadow: var(--glow-cyan);
+}
+
+@media (max-width: 1100px) {
+  .status-rail { grid-template-columns: repeat(3, 1fr); }
+  .main { grid-template-columns: 1fr; }
+  .radar { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============= BOOT OVERLAY ============= -->
+<div class="boot-overlay" id="boot">
+  <div class="boot-logo">⚡ COMMANDCENTER v1.0</div>
+  <div class="boot-lines" id="boot-lines"></div>
+</div>
+
+<!-- ============= HEADER ============= -->
+<header class="header">
+  <div class="header-left">
+    <div class="brand"><span class="brand-bolt">⚡</span> COMMANDCENTER</div>
+    <div class="status-strip">
+      <span class="live-dot" id="live-dot"></span>
+      <span id="conn-status">ONLINE</span>
+    </div>
+    <div class="header-pill"><span class="label">SES</span><span id="session-timer">00:00:00</span></div>
+  </div>
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="header-right">
+    <div class="header-pill"><span class="label">WX</span><span id="weather-display">--</span></div>
+    <div class="header-pill"><span class="label">USR</span><span class="greeting">THOMAS</span></div>
+    <div class="header-pill"><span class="label">DATE</span><span id="date-display">--</span></div>
+  </div>
+</header>
+
+<!-- ============= STATUS RAIL ============= -->
+<div class="status-rail">
+  <div class="stat-card" id="stat-cpu">
+    <div class="stat-label">CPU <span class="dot"></span></div>
+    <div class="stat-value">--%</div>
+    <div class="sparkline" id="spark-cpu"></div>
+  </div>
+  <div class="stat-card" id="stat-ram">
+    <div class="stat-label">MEM <span class="dot"></span></div>
+    <div class="stat-value">--%</div>
+    <div class="sparkline" id="spark-ram"></div>
+  </div>
+  <div class="stat-card" id="stat-disk">
+    <div class="stat-label">DISK <span class="dot"></span></div>
+    <div class="stat-value">--%</div>
+    <div class="stat-sub" id="disk-sub">--</div>
+  </div>
+  <div class="stat-card" id="stat-uptime">
+    <div class="stat-label">UPTIME <span class="dot"></span></div>
+    <div class="stat-value" style="font-size: 14px;">--</div>
+    <div class="stat-sub">SYS BOOT</div>
+  </div>
+  <div class="stat-card" id="stat-agents">
+    <div class="stat-label">AGENTS <span class="dot"></span></div>
+    <div class="stat-value" style="font-size:14px;"><span id="agent-active">2</span> / 3 ACTIVE</div>
+    <div class="stat-sub" id="agent-list">opencode · claude</div>
+  </div>
+  <div class="stat-card" id="stat-events">
+    <div class="stat-label">EVENTS <span class="dot"></span></div>
+    <div class="stat-value" style="font-size:14px;"><span id="ev-count">0</span> LOGGED</div>
+    <div class="stat-sub" id="ev-last">awaiting signal...</div>
+  </div>
+</div>
+
+<!-- ============= MAIN ============= -->
+<main class="main">
+  <div class="chat-panel" id="panel-0" tabindex="0">
+    <div class="panel-header">
+      <span class="panel-tag">CH 01</span>
+      <div class="agent-icon opencode" data-panel="0" title="Click to cycle agent">&#x1F7E2;</div>
+      <span class="panel-project">commandcenter</span>
+      <span class="panel-agent-name" id="agent-name-0">opencode</span>
+      <div class="status-dot disconnected" id="status-0"></div>
+    </div>
+    <div class="fuel-row">
+      <span>FUEL</span>
+      <div class="fuel-gauge"><div class="fuel-gauge-bar" id="fuel-0"></div></div>
+      <span class="fuel-pct" id="fuel-pct-0">0%</span>
+    </div>
+    <div class="term-host" id="term-0" data-panel="0"></div>
+  </div>
+
+  <div class="chat-panel" id="panel-1" tabindex="0">
+    <div class="panel-header">
+      <span class="panel-tag">CH 02</span>
+      <div class="agent-icon claude" data-panel="1" title="Click to cycle agent">&#x1F535;</div>
+      <span class="panel-project">aws-infra</span>
+      <span class="panel-agent-name" id="agent-name-1">claude</span>
+      <div class="status-dot disconnected" id="status-1"></div>
+    </div>
+    <div class="fuel-row">
+      <span>FUEL</span>
+      <div class="fuel-gauge"><div class="fuel-gauge-bar" id="fuel-1"></div></div>
+      <span class="fuel-pct" id="fuel-pct-1">0%</span>
+    </div>
+    <div class="term-host" id="term-1" data-panel="1"></div>
+  </div>
+</main>
+
+<!-- ============= FOOTER ============= -->
+<footer class="footer">
+  <div class="footer-section">
+    <span class="hotkey"><kbd>Ctrl+Alt+S</kbd> CYCLE AGENT</span>
+    <span class="hotkey"><kbd>Ctrl+Alt+Tab</kbd> SWITCH PANEL</span>
+    <span class="hotkey"><kbd>Ctrl+Alt+L</kbd> EVENT LOG</span>
+    <span class="hotkey">CLICK TERM TO TYPE</span>
+  </div>
+  <div class="footer-section">
+    <span class="event-counter" id="event-log-toggle">EVENTS · <span id="event-counter-num">0</span></span>
+    <span id="conn-detail">SOCKET · ESTABLISHED</span>
+    <span>BUILD 1.0.0</span>
+  </div>
+</footer>
+
+<!-- radar -->
+<div class="radar"><div class="radar-dot"></div></div>
+
+<!-- event log popover -->
+<div class="event-log" id="event-log">
+  <div class="event-log-header">
+    <span>▸ EVENT LOG · REALTIME STREAM</span>
+    <button class="close-btn" id="event-close">×</button>
+  </div>
+  <div class="event-log-entries" id="event-log-entries"></div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ===== BOOT SEQUENCE ===== */
+  const BOOT_LINES = [
+    ['INIT       core systems', 'OK'],
+    ['MOUNT      tmux runtime', 'OK'],
+    ['LINK       socket.io transport', 'OK'],
+    ['SPAWN      agent: opencode', 'OK'],
+    ['SPAWN      agent: claude', 'OK'],
+    ['SPAWN      agent: codex', 'OK'],
+    ['SYNC       telemetry feed', 'OK'],
+    ['HANDSHAKE  commandcenter ready', 'OK'],
+  ];
+  const bootLines = document.getElementById('boot-lines');
+  BOOT_LINES.forEach((line, i) => {
+    const el = document.createElement('div');
+    el.className = 'boot-line';
+    el.style.animationDelay = (i * 90) + 'ms';
+    el.innerHTML = `<span class="label">[${String(i+1).padStart(2,'0')}] ${line[0]}</span><span class="ok">[ ${line[1]} ]</span>`;
+    bootLines.appendChild(el);
+  });
+  setTimeout(() => {
+    document.getElementById('boot').classList.add('done');
+  }, BOOT_LINES.length * 90 + 350);
+
+  /* ===== CLOCK + DATE + SESSION TIMER ===== */
+  const sessionStart = Date.now();
+  const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  function pad(n) { return String(n).padStart(2,'0'); }
+  function tick() {
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    document.getElementById('date-display').textContent =
+      `${DAYS[d.getDay()]} ${pad(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    const el = Math.floor((Date.now() - sessionStart) / 1000);
+    document.getElementById('session-timer').textContent =
+      `${pad(Math.floor(el/3600))}:${pad(Math.floor(el/60)%60)}:${pad(el%60)}`;
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  /* ===== SPARKLINE BUFFERS ===== */
+  const SPARK_LEN = 24;
+  const sparkData = { cpu: [], ram: [] };
+  function renderSpark(name) {
+    const c = document.getElementById('spark-' + name);
+    if (!c) return;
+    c.innerHTML = '';
+    const data = sparkData[name];
+    for (let i = 0; i < SPARK_LEN; i++) {
+      const v = data[i] == null ? 0 : data[i];
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.height = Math.max(2, (v / 100) * 100) + '%';
+      c.appendChild(bar);
+    }
+  }
+  for (let i = 0; i < SPARK_LEN; i++) { sparkData.cpu.push(0); sparkData.ram.push(0); }
+  renderSpark('cpu'); renderSpark('ram');
+
+  /* ===== AGENTS ===== */
+  const AGENTS = [
+    { name: 'opencode', emoji: '\u{1F7E2}', cls: 'opencode' },
+    { name: 'claude',   emoji: '\u{1F535}', cls: 'claude' },
+    { name: 'codex',    emoji: '\u{1F7E3}', cls: 'codex' }
+  ];
+  const panels = [
+    { id: 0, agentIdx: 0, streaming: false, currentAiMsg: null },
+    { id: 1, agentIdx: 1, streaming: false, currentAiMsg: null }
+  ];
+
+  /* ===== EVENTS ===== */
+  const events = [];
+  let eventLogOpen = false;
+
+  /* ===== SOCKET ===== */
+  const socket = io({ transports: ['websocket', 'polling'] });
+
+  socket.on('connect', () => {
+    document.querySelectorAll('.status-dot').forEach(dot => {
+      dot.classList.remove('disconnected');
+      dot.classList.add('connected');
+    });
+    document.getElementById('live-dot').classList.remove('offline');
+    document.getElementById('conn-status').textContent = 'ONLINE';
+    document.getElementById('conn-detail').textContent = 'SOCKET · ESTABLISHED';
+  });
+
+  socket.on('disconnect', () => {
+    document.querySelectorAll('.status-dot').forEach(dot => {
+      dot.classList.remove('connected');
+      dot.classList.add('disconnected');
+    });
+    document.getElementById('live-dot').classList.add('offline');
+    document.getElementById('conn-status').textContent = 'OFFLINE';
+    document.getElementById('conn-detail').textContent = 'SOCKET · LOST';
+  });
+
+  /* ===== TERMINALS (xterm.js + PTY bridge) ===== */
+  const PROJECTS = ['commandcenter', 'aws-infra'];
+  const terms = {};
+
+  const TERM_THEME = {
+    background: '#05080d',
+    foreground: '#d8e4f0',
+    cursor: '#00d9ff',
+    cursorAccent: '#05080d',
+    selectionBackground: 'rgba(0,217,255,0.25)',
+    black: '#0a0f17',
+    red: '#ff4466',
+    green: '#00ff88',
+    yellow: '#ffaa00',
+    blue: '#00d9ff',
+    magenta: '#ff33aa',
+    cyan: '#00d9ff',
+    white: '#d8e4f0',
+    brightBlack: '#3a4a5e',
+    brightRed: '#ff6680',
+    brightGreen: '#5fffaa',
+    brightYellow: '#ffcc55',
+    brightBlue: '#5fe5ff',
+    brightMagenta: '#ff66bb',
+    brightCyan: '#5fe5ff',
+    brightWhite: '#ffffff',
+  };
+
+  function openTerm(panelId) {
+    const host = document.getElementById(`term-${panelId}`);
+    if (!host) return;
+    // tear down old if reopening
+    if (terms[panelId]) {
+      try { terms[panelId].term.dispose(); } catch (e) {}
+      host.innerHTML = '';
+    }
+    const term = new Terminal({
+      fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
+      fontSize: 12,
+      lineHeight: 1.2,
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      allowTransparency: true,
+      theme: TERM_THEME,
+      scrollback: 5000,
+    });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(host);
+    try { fit.fit(); } catch (e) {}
+    term.focus();
+
+    terms[panelId] = { term, fit };
+
+    socket.emit('term_open', {
+      panel: panelId,
+      project: PROJECTS[panelId],
+      agent: AGENTS[panels[panelId].agentIdx].name,
+      rows: term.rows,
+      cols: term.cols,
+    });
+
+    term.onData(d => socket.emit('term_input', { panel: panelId, data: d }));
+    term.onResize(({ rows, cols }) =>
+      socket.emit('term_resize', { panel: panelId, rows, cols })
+    );
+  }
+
+  socket.on('term_output', (msg) => {
+    const t = terms[msg.panel];
+    if (t) t.term.write(msg.data);
+  });
+
+  // open both panels once socket connects
+  let opened = false;
+  socket.on('connect', () => {
+    if (!opened) {
+      opened = true;
+      panels.forEach(p => openTerm(p.id));
+    }
+  });
+
+  // refit on window resize
+  window.addEventListener('resize', () => {
+    Object.values(terms).forEach(t => { try { t.fit.fit(); } catch (e) {} });
+  });
+
+  /* ===== METRICS ===== */
+  socket.on('metrics_update', (data) => {
+    updateStat('cpu', data.cpu);
+    updateStat('ram', data.ram);
+    updateStat('disk', data.disk);
+    updateUptime(data.uptime);
+    if (data.disk_used && data.disk_total) {
+      document.getElementById('disk-sub').textContent = `${data.disk_used} / ${data.disk_total}`;
+    }
+    if (typeof data.cpu === 'number') {
+      sparkData.cpu.push(data.cpu); sparkData.cpu.shift(); renderSpark('cpu');
+    }
+    if (typeof data.ram === 'number') {
+      sparkData.ram.push(data.ram); sparkData.ram.shift(); renderSpark('ram');
+    }
+  });
+
+  function updateStat(name, value) {
+    const card = document.getElementById(`stat-${name}`);
+    if (!card) return;
+    const valEl = card.querySelector('.stat-value');
+    valEl.textContent = (value == null ? '--' : value) + '%';
+    card.classList.remove('warn', 'crit');
+    if (value >= 90) card.classList.add('crit');
+    else if (value >= 70) card.classList.add('warn');
+  }
+
+  function updateUptime(value) {
+    const card = document.getElementById('stat-uptime');
+    if (!card) return;
+    card.querySelector('.stat-value').textContent = value || '--';
+  }
+
+  /* ===== WEATHER ===== */
+  socket.on('weather_update', (data) => {
+    document.getElementById('weather-display').textContent = data.text || '--';
+  });
+
+  /* ===== TOKENS ===== */
+  socket.on('token_update', (data) => {
+    const bar = document.getElementById(`fuel-${data.panel}`);
+    const pctEl = document.getElementById(`fuel-pct-${data.panel}`);
+    if (bar) {
+      const pct = Math.min(100, Math.max(0, data.percent));
+      bar.style.width = pct + '%';
+      if (pct > 90) bar.style.background = 'linear-gradient(90deg, var(--orange), var(--red))';
+      else if (pct > 70) bar.style.background = 'linear-gradient(90deg, var(--yellow), var(--orange))';
+      else bar.style.background = 'linear-gradient(90deg, var(--cyan), var(--green))';
+      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+    }
+  });
+
+  /* ===== EVENT LOG ===== */
+  const EVENT_ICONS = { TOOL: '\u{1F527}', THINK: '\u{1F9E0}', ERROR: '⚠', INFO: 'ℹ' };
+
+  socket.on('event_log', (data) => {
+    const entry = { type: data.type || 'INFO', message: data.message || '', time: new Date() };
+    events.unshift(entry);
+    if (events.length > 50) events.pop();
+    renderEvents();
+    document.getElementById('ev-count').textContent = events.length;
+    document.getElementById('ev-last').textContent = entry.message.slice(0, 32);
+  });
+
+  function renderEvents() {
+    const container = document.getElementById('event-log-entries');
+    container.innerHTML = '';
+    events.forEach(ev => {
+      const div = document.createElement('div');
+      div.classList.add('event-entry');
+      const t = ev.time;
+      div.innerHTML = `
+        <span class="event-time">${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}</span>
+        <span class="event-badge ${ev.type}">${EVENT_ICONS[ev.type] || ''} ${ev.type}</span>
+        <span>${escapeHtml(ev.message)}</span>
+      `;
+      container.appendChild(div);
+    });
+    document.getElementById('event-counter-num').textContent = events.length;
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  document.getElementById('event-log-toggle').addEventListener('click', toggleLog);
+  document.getElementById('event-close').addEventListener('click', toggleLog);
+  function toggleLog() {
+    eventLogOpen = !eventLogOpen;
+    document.getElementById('event-log').classList.toggle('open', eventLogOpen);
+  }
+
+  /* ===== AGENT SWITCH ===== */
+  function switchAgent(panelId) {
+    const p = panels[panelId];
+    p.agentIdx = (p.agentIdx + 1) % AGENTS.length;
+    const agent = AGENTS[p.agentIdx];
+    const icon = document.querySelector(`#panel-${panelId} .agent-icon`);
+    icon.textContent = agent.emoji;
+    icon.className = `agent-icon ${agent.cls}`;
+    icon.dataset.panel = panelId;
+    document.getElementById(`agent-name-${panelId}`).textContent = agent.name;
+    document.getElementById('agent-list').textContent =
+      panels.map(p => AGENTS[p.agentIdx].name).join(' · ');
+    // tell the server to swap the underlying PTY to the new agent
+    socket.emit('term_close', { panel: panelId });
+    openTerm(panelId);
+  }
+
+  document.querySelectorAll('.agent-icon').forEach(el => {
+    el.addEventListener('click', () => switchAgent(parseInt(el.dataset.panel)));
+  });
+
+
+  /* ===== GLOBAL HOTKEYS =====
+     Terminal panels capture keystrokes; modifier (Ctrl+Alt) needed so we
+     don't fight tmux/claude keybinds. */
+  let focusedPanel = 0;
+  document.querySelectorAll('.chat-panel').forEach(p => {
+    p.addEventListener('focusin', () => {
+      focusedPanel = parseInt(p.id.split('-')[1]);
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey && e.altKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 's') {
+      e.preventDefault();
+      switchAgent(focusedPanel);
+    } else if (k === 'l') {
+      e.preventDefault();
+      toggleLog();
+    } else if (k === 'tab' || k === 'arrowright') {
+      e.preventDefault();
+      const next = (focusedPanel + 1) % panels.length;
+      focusedPanel = next;
+      if (terms[next]) terms[next].term.focus();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
