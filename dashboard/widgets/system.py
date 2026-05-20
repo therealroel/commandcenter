@@ -4,6 +4,12 @@ from datetime import timedelta
 
 
 class SystemGatherer:
+    def __init__(self):
+        self._cpu_cache = None
+        self._ram_cache = None
+        self._disk_cache = None
+        self._system_cache = None
+
     def get_cpu(self) -> dict:
         percent = psutil.cpu_percent(interval=0.1)
         freq_mhz = psutil.cpu_freq().current if psutil.cpu_freq() else 0
@@ -51,17 +57,14 @@ class SystemGatherer:
         return {"used_gb": 0, "total_gb": 0, "percent": 0, "mount": "/"}
 
     def get_system(self) -> dict:
-        hostname = psutil.os.uname().nodename
-        os_name = psutil.os.uname().sysname
-        kernel = psutil.os.uname().release
-        uptime_seconds = psutil.boot_time()
-        now = psutil.os.path.getmtime("/proc/1") if os.path.exists("/proc/1") else psutil.boot_time()
-        uptime_seconds = (now - psutil.boot_time()) if os.path.exists("/proc/1") else 0
+        hostname = os.uname().nodename
+        os_name = os.uname().sysname
+        kernel = os.uname().release
         try:
             with open("/proc/uptime") as f:
                 uptime_seconds = float(f.read().split()[0])
         except Exception:
-            uptime_seconds = psutil.time.time() - psutil.boot_time()
+            uptime_seconds = 0
         uptime_delta = timedelta(seconds=int(uptime_seconds))
         days = uptime_delta.days
         hours, remainder = divmod(uptime_delta.seconds, 3600)
@@ -80,6 +83,13 @@ class SystemWidget:
         self.term = term
         self.gatherer = gatherer
 
+    def _color_text(self, text, hex_color):
+        r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+        try:
+            return self.term.color(r, g, b)(text)
+        except Exception:
+            return text
+
     def render(self):
         cpu = self.gatherer.get_cpu()
         ram = self.gatherer.get_ram()
@@ -94,7 +104,7 @@ class SystemWidget:
             cpu_color = "#ff4444"
 
         cpu_line = f"CPU: {cpu['percent']:.0f}% @ {cpu['freq_mhz']:.0f}MHz | {cpu['temp_c']:.0f}°C | {cpu['cores']} cores"
-        cpu_line = self.term.color(cpu_line, cpu_color)
+        cpu_line = self._color_text(cpu_line, cpu_color)
 
         ram_line = f"RAM: {ram['used_gb']:.1f} / {ram['total_gb']:.1f} GB | {ram['percent']:.0f}%"
         disk_line = f"Disk: {disk['used_gb']:.0f} / {disk['total_gb']:.0f} GB | {disk['percent']:.0f}%"

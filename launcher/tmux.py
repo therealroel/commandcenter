@@ -7,6 +7,8 @@ class TmuxManager:
         return shutil.which("tmux") is not None
 
     def create_window(self, project_name: str, project_path: str) -> bool:
+        if not self.is_available():
+            return False
         try:
             subprocess.run(
                 ["tmux", "new-window", "-t", f"cc-{project_name}", "-c", project_path, "-d"],
@@ -18,6 +20,8 @@ class TmuxManager:
             return False
 
     def window_exists(self, project_name: str) -> bool:
+        if not self.is_available():
+            return False
         try:
             result = subprocess.run(
                 ["tmux", "list-windows", "-a"],
@@ -30,6 +34,8 @@ class TmuxManager:
             return False
 
     def list_windows(self, prefix: str = "cc-") -> list[str]:
+        if not self.is_available():
+            return []
         try:
             result = subprocess.run(
                 ["tmux", "list-windows", "-a"],
@@ -49,6 +55,8 @@ class TmuxManager:
             return []
 
     def close_window(self, project_name: str) -> bool:
+        if not self.is_available():
+            return False
         try:
             subprocess.run(
                 ["tmux", "kill-window", "-t", f"cc-{project_name}"],

@@ -45,4 +45,4 @@ class TokenWidget:
         fuel_bar = self._build_fuel_bar(percent)
         sparkline = self._build_sparkline()
 
-        return f'{self.term.color(color)}Context: {percent:.0f}% {fuel_bar} {current:,} / {maximum:,} tokens{self.term.normal}\nTrend: {sparkline}'
+        return f'Context: {percent:.0f}% {fuel_bar} {current:,} / {maximum:,} tokens\nTrend: {sparkline}'

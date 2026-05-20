@@ -3,7 +3,7 @@
     {
       "name": "robostock",
       "path": "/home/thjo/projects/robostock",
-      "agent": "codex",
+      "agent": "claude",
       "launch_on_start": true
     },
     {
