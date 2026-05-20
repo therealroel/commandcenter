@@ -973,6 +973,113 @@ body::after {
 .palette-item .agent-dot.claude   { background: var(--cyan);  box-shadow: 0 0 6px var(--cyan); }
 .palette-item .agent-dot.codex    { background: var(--magenta);box-shadow: 0 0 6px var(--magenta); }
 .palette-item .pname { font-weight: 600; color: var(--text-primary); }
+
+.palette-item.add-new {
+  border-top: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
+  background: rgba(0,255,136,0.04);
+  color: var(--green);
+}
+.palette-item.add-new .pname { color: var(--green); }
+.palette-item.add-new:hover, .palette-item.add-new.active {
+  background: rgba(0,255,136,0.10);
+  border-left-color: var(--green);
+}
+
+.palette-item.is-dir .pname::before { content: '▸ '; color: var(--cyan); }
+.palette-item.is-parent .pname::before { content: '↰ '; color: var(--yellow); }
+.palette-item .git-mark {
+  font-size: 9px;
+  color: var(--green);
+  letter-spacing: 0.2em;
+  border: 1px solid rgba(0,255,136,0.3);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+.palette-item .pdel {
+  opacity: 0;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+}
+.palette-item:hover .pdel { opacity: 1; }
+.palette-item .pdel:hover { color: var(--red); border-color: rgba(255,68,102,0.4); }
+
+.palette-path {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(0,217,255,0.04);
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.05em;
+  word-break: break-all;
+}
+.palette-path b { color: var(--cyan); }
+
+.palette-form {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+.palette-form label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 4px;
+}
+.palette-form input, .palette-form select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 2px;
+  outline: none;
+}
+.palette-form input:focus, .palette-form select:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0,217,255,0.25);
+}
+.palette-form .actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.palette-form button {
+  background: linear-gradient(180deg, var(--cyan), var(--cyan-dim));
+  border: none;
+  color: var(--bg);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  padding: 8px 14px;
+  border-radius: 2px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.palette-form button.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-bright);
+}
+.palette-form button:hover { filter: brightness(1.1); }
+.palette-form .err {
+  color: var(--red);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  min-height: 14px;
+}
 .palette-item .ppath { font-size: 10px; color: var(--text-dim); }
 .palette-item .ptag {
   font-size: 9px;
@@ -1134,8 +1241,32 @@ body::after {
       <span>▸ SWITCH PROJECT</span>
       <span class="target">PANEL <b id="palette-target">--</b></span>
     </div>
+    <div class="palette-path" id="palette-path" style="display:none;"></div>
     <input class="palette-input" id="palette-input" placeholder="type to filter projects..." autocomplete="off">
     <div class="palette-list" id="palette-list"></div>
+    <div class="palette-form" id="palette-form" style="display:none;">
+      <div>
+        <label>Project name</label>
+        <input id="pf-name" autocomplete="off">
+      </div>
+      <div>
+        <label>Path</label>
+        <input id="pf-path" readonly>
+      </div>
+      <div>
+        <label>Agent</label>
+        <select id="pf-agent">
+          <option value="claude">claude</option>
+          <option value="opencode">opencode</option>
+          <option value="codex">codex</option>
+        </select>
+      </div>
+      <div class="err" id="pf-err"></div>
+      <div class="actions">
+        <button type="button" class="ghost" id="pf-back">← Back</button>
+        <button type="button" id="pf-save">Save Project</button>
+      </div>
+    </div>
     <div class="palette-footer">
       <span><kbd>↑↓</kbd> NAV</span>
       <span><kbd>↵</kbd> OPEN</span>
@@ -1431,17 +1562,24 @@ body::after {
     overlay: document.getElementById('palette-overlay'),
     input: document.getElementById('palette-input'),
     list: document.getElementById('palette-list'),
+    pathEl: document.getElementById('palette-path'),
+    form: document.getElementById('palette-form'),
     target: document.getElementById('palette-target'),
     count: document.getElementById('palette-count'),
     panel: 0,
     active: 0,
-    filtered: [],
+    mode: 'list',   // 'list' | 'browse' | 'form'
+    items: [],      // currently rendered selectables
+    browseData: null,
+    pendingPath: null,
   };
+
   function openPalette(panelId) {
     palette.panel = panelId;
     palette.target.textContent = String(panelId);
     palette.input.value = '';
     palette.active = 0;
+    palette.mode = 'list';
     palette.overlay.classList.add('open');
     renderPalette();
     setTimeout(() => palette.input.focus(), 30);
@@ -1449,43 +1587,218 @@ body::after {
   function closePalette() {
     palette.overlay.classList.remove('open');
   }
+
+  function setMode(mode) {
+    palette.mode = mode;
+    palette.pathEl.style.display = mode === 'browse' ? '' : 'none';
+    palette.form.style.display   = mode === 'form'   ? 'grid' : 'none';
+    palette.list.style.display   = mode === 'form'   ? 'none' : '';
+    palette.input.style.display  = mode === 'form'   ? 'none' : '';
+    if (mode === 'list') palette.input.placeholder = 'type to filter projects...';
+    if (mode === 'browse') palette.input.placeholder = 'type to filter folders...';
+    palette.input.value = '';
+    palette.active = 0;
+  }
+
+  // ===== LIST MODE =====
   function renderPalette() {
+    if (palette.mode === 'browse') return renderBrowse();
+    if (palette.mode === 'form')   return; // form has its own UI
     const q = palette.input.value.toLowerCase().trim();
-    palette.filtered = PROJECT_LIST.filter(p =>
+    const filtered = PROJECT_LIST.filter(p =>
       !q || p.name.toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q)
     );
-    palette.count.textContent = palette.filtered.length;
+    // Build item list with "+ NEW PROJECT" pinned at end (or top)
+    palette.items = [{ kind: 'add' }, ...filtered.map(p => ({ kind: 'project', proj: p }))];
+    palette.count.textContent = filtered.length;
     palette.list.innerHTML = '';
-    palette.filtered.forEach((p, i) => {
+    palette.items.forEach((it, i) => {
       const div = document.createElement('div');
-      div.className = 'palette-item' + (i === palette.active ? ' active' : '');
-      div.innerHTML = `
-        <span class="agent-dot ${p.agent || 'claude'}"></span>
-        <div>
-          <div class="pname">${escapeHtml(p.name)}</div>
-          <div class="ppath">${escapeHtml(p.path || '')}</div>
-        </div>
-        <span class="ptag">${escapeHtml((p.agent||'claude').toUpperCase())}</span>
-      `;
-      div.addEventListener('click', () => {
-        palette.active = i;
-        confirmPalette();
-      });
+      const activeCls = i === palette.active ? ' active' : '';
+      if (it.kind === 'add') {
+        div.className = 'palette-item add-new' + activeCls;
+        div.innerHTML = `
+          <span class="agent-dot" style="background:var(--green);box-shadow:0 0 6px var(--green);"></span>
+          <div>
+            <div class="pname">+ NEW PROJECT</div>
+            <div class="ppath">browse a folder and add it to the dashboard</div>
+          </div>
+          <span class="ptag" style="color:var(--green);border-color:rgba(0,255,136,0.4);">ADD</span>
+        `;
+        div.addEventListener('click', () => { palette.active = i; commitItem(); });
+      } else {
+        const p = it.proj;
+        div.className = 'palette-item' + activeCls;
+        div.innerHTML = `
+          <span class="agent-dot ${p.agent || 'claude'}"></span>
+          <div>
+            <div class="pname">${escapeHtml(p.name)}</div>
+            <div class="ppath">${escapeHtml(p.path || '')}</div>
+          </div>
+          <span class="ptag">${escapeHtml((p.agent||'claude').toUpperCase())}</span>
+          <button class="pdel" title="remove project" data-name="${escapeHtml(p.name)}">✕</button>
+        `;
+        div.addEventListener('click', (ev) => {
+          if (ev.target.classList.contains('pdel')) return;
+          palette.active = i; commitItem();
+        });
+        const delBtn = div.querySelector('.pdel');
+        delBtn.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          if (!confirm(`Remove project "${p.name}"?`)) return;
+          await fetch(`/api/projects/${encodeURIComponent(p.name)}`, { method: 'DELETE' });
+          await refreshProjects();
+          renderPalette();
+        });
+      }
       palette.list.appendChild(div);
     });
   }
-  function confirmPalette() {
-    const choice = palette.filtered[palette.active];
-    if (!choice) return;
-    closePalette();
-    rebindPanel(palette.panel, choice.name);
+
+  // ===== BROWSE MODE =====
+  async function startBrowse(startPath) {
+    setMode('browse');
+    await loadDirs(startPath);
   }
+  async function loadDirs(path) {
+    try {
+      const r = await fetch('/api/dirs' + (path ? '?path=' + encodeURIComponent(path) : ''));
+      const data = await r.json();
+      palette.browseData = data;
+      renderBrowse();
+      setTimeout(() => palette.input.focus(), 10);
+    } catch (e) {
+      console.error('loadDirs', e);
+    }
+  }
+  function renderBrowse() {
+    const d = palette.browseData;
+    if (!d) return;
+    palette.pathEl.style.display = '';
+    palette.pathEl.innerHTML = `📁 <b>${escapeHtml(d.path)}</b>`;
+    const q = palette.input.value.toLowerCase().trim();
+    const entries = (d.entries || []).filter(e => !q || e.name.toLowerCase().includes(q));
+    palette.items = [];
+    palette.items.push({ kind: 'use', path: d.path });
+    if (d.parent && d.parent !== d.path) palette.items.push({ kind: 'parent', path: d.parent });
+    entries.forEach(e => palette.items.push({ kind: 'dir', entry: e }));
+    palette.count.textContent = entries.length;
+    palette.list.innerHTML = '';
+    palette.items.forEach((it, i) => {
+      const div = document.createElement('div');
+      const activeCls = i === palette.active ? ' active' : '';
+      if (it.kind === 'use') {
+        div.className = 'palette-item add-new' + activeCls;
+        div.innerHTML = `
+          <span class="agent-dot" style="background:var(--green);box-shadow:0 0 6px var(--green);"></span>
+          <div>
+            <div class="pname">USE THIS FOLDER</div>
+            <div class="ppath">${escapeHtml(it.path)}</div>
+          </div>
+          <span class="ptag" style="color:var(--green);border-color:rgba(0,255,136,0.4);">PICK</span>
+        `;
+      } else if (it.kind === 'parent') {
+        div.className = 'palette-item is-parent' + activeCls;
+        div.innerHTML = `
+          <span class="agent-dot" style="background:var(--yellow);"></span>
+          <div>
+            <div class="pname">..</div>
+            <div class="ppath">${escapeHtml(it.path)}</div>
+          </div>
+          <span class="ptag">UP</span>
+        `;
+      } else {
+        const e = it.entry;
+        div.className = 'palette-item is-dir' + activeCls;
+        div.innerHTML = `
+          <span class="agent-dot" style="background:var(--cyan);box-shadow:0 0 6px var(--cyan);"></span>
+          <div>
+            <div class="pname">${escapeHtml(e.name)}</div>
+            <div class="ppath">${escapeHtml(e.path)}</div>
+          </div>
+          ${e.git ? '<span class="git-mark">GIT</span>' : '<span class="ptag">DIR</span>'}
+        `;
+      }
+      div.addEventListener('click', () => { palette.active = i; commitItem(); });
+      palette.list.appendChild(div);
+    });
+  }
+
+  // ===== FORM MODE =====
+  function openForm(path) {
+    setMode('form');
+    palette.pendingPath = path;
+    const base = path.replace(/\/+$/,'').split('/').pop() || 'project';
+    document.getElementById('pf-name').value = base.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    document.getElementById('pf-path').value = path;
+    document.getElementById('pf-agent').value = 'claude';
+    document.getElementById('pf-err').textContent = '';
+    setTimeout(() => document.getElementById('pf-name').focus(), 30);
+  }
+  document.getElementById('pf-back').addEventListener('click', () => {
+    setMode('browse');
+    renderBrowse();
+    setTimeout(() => palette.input.focus(), 10);
+  });
+  document.getElementById('pf-save').addEventListener('click', saveNewProject);
+  document.getElementById('pf-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); saveNewProject(); }
+    if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+  });
+  async function saveNewProject() {
+    const name  = document.getElementById('pf-name').value.trim();
+    const path  = document.getElementById('pf-path').value.trim();
+    const agent = document.getElementById('pf-agent').value;
+    const errEl = document.getElementById('pf-err');
+    errEl.textContent = '';
+    if (!name) { errEl.textContent = 'name is required'; return; }
+    try {
+      const r = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, path, agent }),
+      });
+      const j = await r.json();
+      if (!r.ok) { errEl.textContent = j.error || 'failed'; return; }
+      await refreshProjects();
+      setMode('list');
+      renderPalette();
+      setTimeout(() => palette.input.focus(), 10);
+    } catch (e) {
+      errEl.textContent = String(e);
+    }
+  }
+
+  async function refreshProjects() {
+    const r = await fetch('/api/projects');
+    const j = await r.json();
+    PROJECT_LIST = j.projects || [];
+  }
+
+  // ===== universal item commit =====
+  function commitItem() {
+    const it = palette.items[palette.active];
+    if (!it) return;
+    if (palette.mode === 'list') {
+      if (it.kind === 'add') {
+        startBrowse(null);
+      } else if (it.kind === 'project') {
+        closePalette();
+        rebindPanel(palette.panel, it.proj.name);
+      }
+    } else if (palette.mode === 'browse') {
+      if (it.kind === 'use')    openForm(it.path);
+      else if (it.kind === 'parent') loadDirs(it.path);
+      else if (it.kind === 'dir')    loadDirs(it.entry.path);
+    }
+  }
+
   palette.input.addEventListener('input', () => { palette.active = 0; renderPalette(); });
   palette.input.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
     else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      palette.active = Math.min(palette.filtered.length - 1, palette.active + 1);
+      palette.active = Math.min(palette.items.length - 1, palette.active + 1);
       renderPalette();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -1493,7 +1806,13 @@ body::after {
       renderPalette();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      confirmPalette();
+      commitItem();
+    } else if (e.key === 'Backspace' && palette.mode === 'browse' && !palette.input.value) {
+      // Backspace with empty input = go up
+      if (palette.browseData && palette.browseData.parent) {
+        e.preventDefault();
+        loadDirs(palette.browseData.parent);
+      }
     }
   });
   palette.overlay.addEventListener('click', e => {

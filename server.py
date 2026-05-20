@@ -58,6 +58,72 @@ def api_projects():
     })
 
 
+@app.route("/api/dirs")
+def api_dirs():
+    raw = request.args.get("path") or os.path.expanduser("~/projects")
+    if not raw:
+        raw = os.path.expanduser("~")
+    path = os.path.realpath(os.path.expanduser(raw))
+    if not os.path.isdir(path):
+        path = os.path.expanduser("~")
+    try:
+        entries = []
+        for name in sorted(os.listdir(path), key=str.lower):
+            if name.startswith("."):
+                continue
+            full = os.path.join(path, name)
+            try:
+                if not os.path.isdir(full):
+                    continue
+                is_git = os.path.isdir(os.path.join(full, ".git"))
+                entries.append({"name": name, "path": full, "git": is_git})
+            except OSError:
+                continue
+        parent = os.path.dirname(path) if path != "/" else None
+        return jsonify({
+            "path": path,
+            "parent": parent,
+            "home": os.path.expanduser("~"),
+            "entries": entries,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc), "path": path, "entries": []}), 500
+
+
+@app.route("/api/projects", methods=["POST"])
+def api_add_project():
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get("name") or "").strip()
+    path = (data.get("path") or "").strip()
+    agent = data.get("agent") or "claude"
+    if not name or not path:
+        return jsonify({"error": "name and path are required"}), 400
+    path = os.path.realpath(os.path.expanduser(path))
+    if not os.path.isdir(path):
+        return jsonify({"error": f"not a directory: {path}"}), 400
+    if agent not in AGENT_CYCLE:
+        return jsonify({"error": f"unknown agent: {agent}"}), 400
+    projects = switcher.load_projects()
+    if any(p["name"] == name for p in projects):
+        return jsonify({"error": f"project '{name}' already exists"}), 409
+    new_proj = {"name": name, "path": path, "agent": agent, "launch_on_start": False}
+    projects.append(new_proj)
+    switcher.save_projects(projects)
+    emit_event("INFO", f"added project {name} → {path}")
+    return jsonify({"ok": True, "project": new_proj})
+
+
+@app.route("/api/projects/<name>", methods=["DELETE"])
+def api_del_project(name):
+    projects = switcher.load_projects()
+    new = [p for p in projects if p["name"] != name]
+    if len(new) == len(projects):
+        return jsonify({"error": "not found"}), 404
+    switcher.save_projects(new)
+    emit_event("INFO", f"removed project {name}")
+    return jsonify({"ok": True})
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
