@@ -223,18 +223,51 @@ def network_thread():
             print("network_thread err:", exc)
 
 
+def get_weather_emoji(condition):
+    """Map weather condition to emoji."""
+    c = condition.lower()
+    if "sun" in c or "clear" in c:
+        return "☀️"
+    elif "cloud" in c and ("part" in c or "few" in c):
+        return "⛅"
+    elif "cloud" in c or "overcast" in c:
+        return "☁️"
+    elif "rain" in c and ("light" in c or "drizzle" in c or "patchy" in c):
+        return "🌦️"
+    elif "rain" in c or "shower" in c:
+        return "🌧️"
+    elif "thunder" in c or "storm" in c:
+        return "⛈️"
+    elif "snow" in c:
+        return "❄️"
+    elif "fog" in c or "mist" in c:
+        return "🌫️"
+    elif "wind" in c:
+        return "💨"
+    else:
+        return "🌡️"
+
 def weather_thread():
-    first_run = True
+    # Emit every 3 seconds for first 30 seconds to catch connecting clients
+    for _ in range(10):
+        try:
+            data = weather_service.get_current()
+            emoji = get_weather_emoji(data['condition'])
+            text = f"{emoji} {data['temp_c']:.0f}°C {data['condition']}"
+            socketio.emit("weather_update", {"text": text, **data})
+        except Exception as exc:
+            print(f"[WEATHER] Error: {exc}")
+        gevent.sleep(3)
+    # Then every 5 minutes
     while True:
         try:
             data = weather_service.get_current()
-            text = f"{data['temp_c']:.0f}°C {data['condition']}"
+            emoji = get_weather_emoji(data['condition'])
+            text = f"{emoji} {data['temp_c']:.0f}°C {data['condition']}"
             socketio.emit("weather_update", {"text": text, **data})
         except Exception as exc:
-            print("weather_thread err:", exc)
-        # Quick retry on first run, then every 5 min
-        gevent.sleep(10 if first_run else 300)
-        first_run = False
+            print(f"[WEATHER] Error: {exc}")
+        gevent.sleep(300)
 
 
 def git_thread():
@@ -322,11 +355,14 @@ def handle_term_open(data):
     # re-attaches to the existing session rather than starting fresh.
     session = f"cc-{project_name or 'panel'+str(panel)}-{agent_cmd}"
 
+    # fnm (node version manager) setup for codex
+    fnm_setup = 'export PATH="$HOME/.local/share/fnm:$PATH"; eval "$(fnm env 2>/dev/null)" 2>/dev/null;'
+
     if tmux.is_available():
         # Check if session already exists - if so, just attach (fast resume)
         # If not, create new session with the agent command
         shell_cmd = (
-            f"cd {cwd!r} && "
+            f"{fnm_setup} cd {cwd!r} && "
             f"(tmux has-session -t {session!r} 2>/dev/null && "
             f"exec tmux attach-session -t {session!r} || "
             f"(command -v {agent_cmd} >/dev/null && "
@@ -335,7 +371,7 @@ def handle_term_open(data):
         )
     else:
         shell_cmd = (
-            f"cd {cwd!r} && "
+            f"{fnm_setup} cd {cwd!r} && "
             f"(command -v {agent_cmd} >/dev/null && exec {agent_cmd} || exec bash -i)"
         )
     argv = ["/bin/bash", "-lc", shell_cmd]
