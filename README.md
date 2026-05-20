@@ -40,24 +40,30 @@ python server.py
 # Open http://localhost:5050
 ```
 
-### Desktop App (Linux)
+### Desktop App
 
-Install as a desktop application with its own Chrome window:
+Install as a standalone desktop application with its own Chrome window:
 
+**Linux:**
 ```bash
 ./install-desktop.sh
+# Then run 'commandcenter' or find it in your app launcher
 ```
 
-This creates:
-- `~/.local/bin/commandcenter` — launcher script
-- `~/.local/share/applications/commandcenter.desktop` — app menu entry
+**macOS:**
+```bash
+./install-desktop-macos.sh
+# Then open ~/Applications/CommandCenter.app or add to Dock
+```
 
-Then run `commandcenter` or find "CommandCenter" in your app launcher.
+**Windows:** Use WSL (Windows Subsystem for Linux) — native Windows is not supported due to PTY limitations.
 
 ## Requirements
 
+- **Linux** or **macOS** (Windows requires WSL)
 - Python 3.10+
 - tmux (recommended for session persistence)
+- Google Chrome or Chromium (for desktop app mode)
 - At least one AI coding agent installed
 
 ### Supported Agents
