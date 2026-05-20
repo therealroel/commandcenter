@@ -1,3 +1,13 @@
 .venv/
 __pycache__/
 *.pyc
+*.log
+.env
+node_modules/
+
+# User-specific config (use projects.example.json as template)
+config/projects.json
+config/projects.json.backup
+
+# Superpowers brainstorm artifacts
+.superpowers/
