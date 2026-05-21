@@ -346,6 +346,72 @@ body::after {
   box-shadow: var(--shadow-lg);
 }
 
+/* Slow non-annoying border fade when an agent is waiting on the user. */
+.chat-panel.awaiting-input {
+  animation: awaitingPulse 2.6s ease-in-out infinite;
+}
+@keyframes awaitingPulse {
+  0%, 100% {
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  50% {
+    border-color: var(--yellow);
+    box-shadow: 0 0 14px rgba(255,170,0,0.22);
+  }
+}
+
+/* Bottom-of-panel bash terminal (toggled per panel). */
+.term-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.term-toggle:hover {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+}
+.term-toggle.on {
+  background: rgba(0,217,255,0.12);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0,217,255,0.3);
+}
+
+.bash-splitter {
+  height: 4px;
+  background: var(--border);
+  cursor: row-resize;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.bash-splitter:hover,
+.bash-splitter.dragging {
+  background: var(--cyan);
+}
+
+.bash-host {
+  flex: 1 1 0;
+  min-height: 60px;
+  padding: 6px 8px 4px;
+  background: #05080d;
+  position: relative;
+  border-top: 1px solid var(--border);
+}
+.bash-host .xterm { height: 100%; }
+.bash-host .xterm-viewport { background: transparent !important; overflow-y: scroll !important; }
+.bash-host .xterm-viewport::-webkit-scrollbar { width: 6px; }
+.bash-host .xterm-viewport::-webkit-scrollbar-thumb { background: var(--accent-muted); border-radius: 3px; }
+
 .panel-header {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
@@ -1073,6 +1139,62 @@ body::after {
 .agent-dropdown-item .dot.codex { background: var(--magenta); box-shadow: 0 0 6px var(--magenta); }
 .agent-btn { position: relative; }
 
+.config-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--card);
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  transition: all 0.15s ease;
+}
+.config-btn:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(0,217,255,0.2);
+  color: var(--text-primary);
+}
+.config-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 6px var(--yellow);
+}
+.config-btn.bedrock .config-dot { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.config-btn.subscription .config-dot { background: var(--magenta); box-shadow: 0 0 6px var(--magenta); }
+
+.win-controls {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+.win-controls.visible { display: flex; }
+.win-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
+  background: var(--card);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.win-btn:hover { border-color: var(--cyan); color: var(--text-primary); }
+.win-btn.close:hover { border-color: var(--red); color: var(--red); }
+
 /* ============= GIT PILL ============= */
 .git-pill {
   font-size: 11px;
@@ -1384,6 +1506,15 @@ body::after {
     <div class="header-pill"><span class="label">WX</span><span id="weather-display">--</span></div>
     <div class="header-pill"><span class="label">USR</span><span class="greeting" id="username-display">{{ username }}</span></div>
     <div class="header-pill"><span class="label">DATE</span><span id="date-display">--</span></div>
+    <button class="config-btn" id="config-btn" title="Switch Claude config">
+      <span class="config-dot" id="config-dot"></span>
+      <span id="config-name">--</span>
+    </button>
+    <div class="win-controls" id="win-controls">
+      <button class="win-btn minimize" id="win-minimize" title="Minimize">─</button>
+      <button class="win-btn maximize" id="win-maximize" title="Fullscreen">□</button>
+      <button class="win-btn close" id="win-close" title="Close">×</button>
+    </div>
   </div>
 </header>
 
@@ -1453,6 +1584,7 @@ body::after {
       </button>
       <span class="panel-project">commandcenter</span>
       <span class="git-pill" id="git-0" title="git status">--</span>
+      <button class="term-toggle" data-panel="0" title="Toggle bash terminal in this channel">Terminal</button>
       <div class="status-dot disconnected" id="status-0"></div>
     </div>
     <div class="term-host" id="term-0" data-panel="0"></div>
@@ -1468,6 +1600,7 @@ body::after {
       </button>
       <span class="panel-project">aws-infra</span>
       <span class="git-pill" id="git-1" title="git status">--</span>
+      <button class="term-toggle" data-panel="1" title="Toggle bash terminal in this channel">Terminal</button>
       <div class="status-dot disconnected" id="status-1"></div>
     </div>
     <div class="term-host" id="term-1" data-panel="1"></div>
@@ -1483,6 +1616,7 @@ body::after {
       </button>
       <span class="panel-project">--</span>
       <span class="git-pill" id="git-2" title="git status">--</span>
+      <button class="term-toggle" data-panel="2" title="Toggle bash terminal in this channel">Terminal</button>
       <div class="status-dot disconnected" id="status-2"></div>
     </div>
     <div class="term-host" id="term-2" data-panel="2"></div>
@@ -1636,7 +1770,90 @@ body::after {
   let eventLogOpen = false;
 
   /* ===== SOCKET ===== */
-  const socket = io({ transports: ['websocket', 'polling'] });
+  const socket = io({
+    transports: ['polling', 'websocket'],
+    upgrade: true,
+    timeout: 20000,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 5
+  });
+
+  /* ===== WINDOW CONTROLS ===== */
+  const winControls = document.getElementById('win-controls');
+  const winMinimize = document.getElementById('win-minimize');
+  const winMaximize = document.getElementById('win-maximize');
+  const winClose = document.getElementById('win-close');
+
+  // Hide minimize - can't work in browser
+  winMinimize.style.display = 'none';
+
+  function updateWindowControls(isFS) {
+    if (!winControls) return;
+    winControls.classList.add('visible');
+    if (isFS) {
+      winMaximize.textContent = '⛶';
+      winMaximize.title = 'Exit Fullscreen';
+      winClose.style.display = '';
+    } else {
+      winMaximize.textContent = '□';
+      winMaximize.title = 'Fullscreen';
+      winClose.style.display = '';
+    }
+  }
+
+  function checkFullscreen() {
+    const isFS = !!(document.fullscreenElement || (screen.width === window.innerWidth && screen.height === window.innerHeight));
+    updateWindowControls(isFS);
+  }
+
+  checkFullscreen();
+  setInterval(checkFullscreen, 1000);
+
+  winMaximize.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  });
+  winClose.addEventListener('click', () => window.close());
+
+  /* ===== CONFIG SWITCH ===== */
+  let currentConfig = 'unknown';
+
+  function updateConfigUI(profile) {
+    const btn = document.getElementById('config-btn');
+    const dot = document.getElementById('config-dot');
+    const name = document.getElementById('config-name');
+    if (!btn) return;
+    currentConfig = profile;
+    btn.className = 'config-btn ' + profile;
+    dot.className = 'config-dot';
+    name.textContent = profile.toUpperCase();
+  }
+
+  function switchConfig() {
+    const next = currentConfig === 'bedrock' ? 'subscription' : 'bedrock';
+    if (confirm(`Switch to ${next.toUpperCase()} config?`)) {
+      fetch('/api/config/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: next })
+      }).then(r => r.json()).then(data => {
+        if (data.ok) {
+          updateConfigUI(next);
+        } else {
+          alert('Failed: ' + (data.error || 'unknown error'));
+        }
+      }).catch(err => alert('Error: ' + err));
+    }
+  }
+
+  document.getElementById('config-btn').addEventListener('click', switchConfig);
+
+  // Fetch initial config
+  fetch('/api/config').then(r => r.json()).then(data => updateConfigUI(data.profile)).catch(() => {});
 
   socket.on('connect', () => {
     document.querySelectorAll('.status-dot').forEach(dot => {
@@ -1698,6 +1915,14 @@ body::after {
       try { terms[panelId].term.dispose(); } catch (e) {}
       host.innerHTML = '';
     }
+    // Project changing → tear down any bash terminal (its cwd is now stale)
+    // and reset the TERMINAL toggle button.
+    if (typeof bashTerms !== 'undefined' && bashTerms[panelId]) {
+      closeBashPanel(panelId);
+    }
+    document.querySelector(`.term-toggle[data-panel="${panelId}"]`)?.classList.remove('on');
+    // Project also changed → clear any stale awaiting-input pulse.
+    document.getElementById(`panel-${panelId}`)?.classList.remove('awaiting-input');
 
     // Show loading indicator
     const agentName = AGENTS[panels[panelId].agentIdx].name;
@@ -1774,6 +1999,145 @@ body::after {
     if (!t) return;
     showTermIfReady(msg.panel);
     t.term.write(msg.data);
+  });
+
+  /* ===== BOTTOM BASH TERMINAL (per-panel, rooted at project path) ===== */
+  const bashTerms = {};
+
+  function refitAgent(panelId) {
+    try { terms[panelId]?.fit.fit(); } catch (e) {}
+  }
+  function refitBash(panelId) {
+    try { bashTerms[panelId]?.fit.fit(); } catch (e) {}
+  }
+
+  function openBashPanel(panelId) {
+    if (bashTerms[panelId]) return; // already open
+    const panel = document.getElementById(`panel-${panelId}`);
+    const termHost = document.getElementById(`term-${panelId}`);
+    if (!panel || !termHost) return;
+
+    // Splitter + bash host, appended after the agent terminal so flexbox
+    // gives us a vertical stack of: header | term-host | splitter | bash-host.
+    const splitter = document.createElement('div');
+    splitter.className = 'bash-splitter';
+    splitter.id = `split-${panelId}`;
+
+    const bashHost = document.createElement('div');
+    bashHost.className = 'bash-host';
+    bashHost.id = `bash-${panelId}`;
+
+    panel.appendChild(splitter);
+    panel.appendChild(bashHost);
+
+    // Default split: chat 2/3, bash 1/3 — driven by flex-grow ratio.
+    termHost.style.flex = '2 1 0';
+    bashHost.style.flex = '1 1 0';
+
+    // Splitter drag → live flex-grow update; both terminals refit so xterm
+    // recomputes its grid for the new pixel dimensions.
+    let dragging = false;
+    const onMove = (e) => {
+      if (!dragging) return;
+      const rect = panel.getBoundingClientRect();
+      const headerH = panel.querySelector('.panel-header').getBoundingClientRect().height;
+      const usable = rect.height - headerH - 4; // 4px splitter
+      const topY = rect.top + headerH;
+      const chatH = Math.max(60, Math.min(usable - 60, e.clientY - topY));
+      const bashH = Math.max(60, usable - chatH);
+      termHost.style.flex = `${chatH} 1 0`;
+      bashHost.style.flex = `${bashH} 1 0`;
+      refitAgent(panelId);
+      refitBash(panelId);
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      splitter.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    splitter.addEventListener('mousedown', (e) => {
+      dragging = true;
+      splitter.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      e.preventDefault();
+    });
+
+    // xterm for the bash side.
+    const term = new Terminal({
+      fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
+      fontSize: 13,
+      lineHeight: 1.2,
+      cursorBlink: true,
+      cursorStyle: 'block',
+      allowTransparency: true,
+      theme: TERM_THEME,
+      scrollback: 5000,
+      convertEol: true,
+    });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(bashHost);
+    try { fit.fit(); } catch (e) {}
+    bashTerms[panelId] = { term, fit };
+
+    socket.emit('term_bash_open', {
+      panel: panelId,
+      rows: term.rows,
+      cols: term.cols,
+    });
+    term.onData(d => socket.emit('term_bash_input', { panel: panelId, data: d }));
+    term.onResize(({ rows, cols }) =>
+      socket.emit('term_bash_resize', { panel: panelId, rows, cols })
+    );
+
+    // Refit the now-smaller agent terminal on next tick.
+    setTimeout(() => refitAgent(panelId), 50);
+  }
+
+  function closeBashPanel(panelId) {
+    const t = bashTerms[panelId];
+    if (t) {
+      try { t.term.dispose(); } catch (e) {}
+      delete bashTerms[panelId];
+    }
+    socket.emit('term_bash_close', { panel: panelId });
+    document.getElementById(`split-${panelId}`)?.remove();
+    document.getElementById(`bash-${panelId}`)?.remove();
+    const termHost = document.getElementById(`term-${panelId}`);
+    if (termHost) termHost.style.flex = '1';
+    setTimeout(() => refitAgent(panelId), 50);
+  }
+
+  socket.on('term_bash_output', (msg) => {
+    const t = bashTerms[msg.panel];
+    if (t) t.term.write(msg.data);
+  });
+
+  // Wire up the per-panel TERMINAL toggle button.
+  document.querySelectorAll('.term-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const panelId = parseInt(btn.dataset.panel, 10);
+      if (bashTerms[panelId]) {
+        closeBashPanel(panelId);
+        btn.classList.remove('on');
+      } else {
+        openBashPanel(panelId);
+        btn.classList.add('on');
+      }
+    });
+  });
+
+  /* ===== AWAITING-INPUT BORDER PULSE ===== */
+  socket.on('panel_awaiting', (msg) => {
+    const panel = document.getElementById(`panel-${msg.panel}`);
+    if (!panel) return;
+    if (msg.awaiting) panel.classList.add('awaiting-input');
+    else panel.classList.remove('awaiting-input');
   });
 
   /* ===== projects strip (top bar) ===== */
@@ -2243,6 +2607,7 @@ body::after {
   // refit on window resize
   window.addEventListener('resize', () => {
     Object.values(terms).forEach(t => { try { t.fit.fit(); } catch (e) {} });
+    Object.values(bashTerms).forEach(t => { try { t.fit.fit(); } catch (e) {} });
   });
 
   /* ===== METRICS ===== */

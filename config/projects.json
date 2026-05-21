@@ -1,0 +1,34 @@
+{
+  "projects": [
+    {
+      "name": "robostock",
+      "path": "/home/thjo/projects/robostock",
+      "agent": "claude",
+      "launch_on_start": true
+    },
+    {
+      "name": "routercontrol",
+      "path": "/home/thjo/projects/router-control",
+      "agent": "codex",
+      "launch_on_start": true
+    },
+    {
+      "name": "aws-cloud-architecture",
+      "path": "/home/thjo/projects/aws-cloud-architecture",
+      "agent": "claude",
+      "launch_on_start": false
+    },
+    {
+      "name": "gcp-architecture",
+      "path": "/home/thjo/projects/gcp-architecture",
+      "agent": "opencode",
+      "launch_on_start": false
+    },
+    {
+      "name": "commandcenter",
+      "path": "/home/thjo/projects/commandcenter",
+      "agent": "codex",
+      "launch_on_start": false
+    }
+  ]
+}

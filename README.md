@@ -30,10 +30,6 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure your projects
-cp config/projects.example.json config/projects.json
-# Edit config/projects.json with your project paths
-
 # Run
 python server.py
 
@@ -42,12 +38,11 @@ python server.py
 
 ### Desktop App
 
-Install as a standalone desktop application with its own Chrome window:
+Install as a standalone desktop application (creates shortcut, installs icon, auto-starts server):
 
-**Linux:**
 ```bash
 ./install-desktop.sh
-# Then run 'commandcenter' or find it in your app launcher
+commandcenter
 ```
 
 **macOS:**
@@ -63,7 +58,7 @@ Install as a standalone desktop application with its own Chrome window:
 - **Linux** or **macOS** (Windows requires WSL)
 - Python 3.10+
 - tmux (recommended for session persistence)
-- Google Chrome or Chromium (for desktop app mode)
+- Default browser (Firefox, Chrome, Edge, etc.)
 - At least one AI coding agent installed
 
 ### Supported Agents
