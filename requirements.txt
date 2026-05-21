@@ -1,6 +1,7 @@
-flask
-flask-socketio
+flask>=3.0
+flask-socketio>=5.4
+python-socketio>=5.11
 psutil
 requests
-gevent
+gevent>=24.2
 gevent-websocket

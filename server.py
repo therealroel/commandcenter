@@ -1,8 +1,11 @@
 import os
 import re
 import shutil
+import subprocess
 import time
+import json
 from datetime import datetime
+from pathlib import Path
 
 import gevent.monkey
 gevent.monkey.patch_all()
@@ -22,7 +25,11 @@ from services.git import GitService
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.urandom(24)
-socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
+# Re-read templates from disk on every request so editing index.html only
+# needs a browser refresh, not a server restart.
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
+socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*", logger=False, engineio_logger=False)
 
 switcher = AgentSwitcher()
 tmux = TmuxManager()
@@ -45,6 +52,49 @@ def index():
     import getpass
     username = getpass.getuser().upper()
     return render_template("index.html", version=__version__, username=username)
+
+
+@app.route("/api/config")
+def api_config():
+    base = Path.home() / ".claude"
+    settings = base / "settings.json"
+    try:
+        with open(settings) as f:
+            data = json.load(f)
+        env = data.get("env", {})
+        if env.get("CLAUDE_CODE_USE_BEDROCK") == "1":
+            profile = "bedrock"
+        else:
+            profile = "subscription"
+    except Exception:
+        profile = "unknown"
+    return jsonify({"profile": profile})
+
+
+@app.route("/api/config/switch", methods=["POST"])
+def api_config_switch():
+    data = request.get_json(force=True) or {}
+    profile = data.get("profile")
+    if profile not in ("bedrock", "subscription"):
+        return jsonify({"error": "invalid profile"}), 400
+    base = Path.home() / ".claude"
+    settings = base / "settings.json"
+    backup = base / f"settings.{profile}-backup.json"
+    if not backup.exists():
+        return jsonify({"error": f"backup not found: {backup}"}), 404
+    try:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        shutil.copy2(settings, settings.with_name(f"settings.json.bak-{ts}"))
+        shutil.copy2(backup, settings)
+        return jsonify({"ok": True, "profile": profile})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/favicon.ico")
+def favicon():
+    # No icon asset shipped; answer cleanly instead of 404ing the console.
+    return ("", 204)
 
 
 @app.route("/api/version")
@@ -144,12 +194,29 @@ def emit_event(event_type, message):
 
 ANSI_RE = re.compile(rb"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*[\x07\x1b]")
 
+# Patterns that mean "this pane is sitting on a prompt waiting for the human".
+# Used both for the slow border-fade alert AND for the tmux janitor heuristic
+# (when combined with idle time, these fingerprints mark a never-prompted session).
+AWAITING_PATTERNS = (
+    "sign in with chatgpt",
+    "sign in with device code",
+    "press enter to continue",
+    "select any you wish to enable",
+    "do you want to proceed",
+    "approve this tool",
+    "allow this tool",
+)
 
-def scan_pty_signals(panel, chunk):
+
+def scan_pty_signals(sid, panel, chunk):
     """Look for human-meaningful events inside raw PTY bytes."""
     text = ANSI_RE.sub(b"", chunk).decode("utf-8", errors="replace")
     lowered = text.lower()
     ch = panel + 1  # panel 0 = CH 1, etc.
+
+    # Awaiting-input alert — emit per-sid so only the panel's owner sees it.
+    if any(p in lowered for p in AWAITING_PATTERNS):
+        socketio.emit("panel_awaiting", {"panel": panel, "awaiting": True}, to=sid)
 
     # Skip noisy startup lines
     if "claude code v" in lowered or "───" in text:
@@ -277,6 +344,85 @@ def weather_thread():
         gevent.sleep(300)
 
 
+# Fingerprints that mean an agent pane is still on its first-launch / login
+# screen — never typed in, never authed. Combined with idle time + the "not
+# currently bound to a visible panel" check, these mark sessions safe to kill.
+NEVER_USED_FINGERPRINTS = (
+    "sign in with chatgpt",
+    "sign in with device code",
+    "welcome to codex",
+)
+
+
+def _sessions_in_use():
+    """tmux session names bound to a visible panel on any connected client.
+
+    The web client only displays sessions that are in `ptys`. Anything else
+    in tmux is by definition a background session.
+    """
+    in_use = set()
+    for sid_map in ptys.values():
+        for panel, slot in sid_map.items():
+            proj = slot.get("project") or f"panel{panel}"
+            agent = slot.get("agent") or "claude"
+            in_use.add(f"cc-{proj}-{agent}")
+    return in_use
+
+
+def tmux_janitor():
+    """Auto-close background agent sessions that were never prompted.
+
+    Strict criteria so we never kill something the user is using:
+      • Session prefix `cc-` (only sessions we spawned)
+      • NOT currently bound to a visible panel on any client
+      • Idle for at least 5 minutes
+      • Pane content still matches a first-launch fingerprint
+    """
+    while True:
+        gevent.sleep(60)
+        if not tmux.is_available():
+            continue
+        try:
+            raw = subprocess.check_output(
+                ["tmux", "list-sessions", "-F", "#{session_name}\t#{session_activity}"],
+                stderr=subprocess.DEVNULL,
+            ).decode().splitlines()
+        except Exception:
+            continue
+        now = time.time()
+        in_use = _sessions_in_use()
+        for line in raw:
+            try:
+                name, act = line.split("\t")
+            except ValueError:
+                continue
+            if not name.startswith("cc-") or name in in_use:
+                continue
+            try:
+                idle = now - int(act)
+            except ValueError:
+                continue
+            if idle < 300:
+                continue
+            try:
+                pane = subprocess.check_output(
+                    ["tmux", "capture-pane", "-p", "-t", name],
+                    stderr=subprocess.DEVNULL,
+                ).decode().lower()
+            except Exception:
+                continue
+            if any(fp in pane for fp in NEVER_USED_FINGERPRINTS):
+                try:
+                    subprocess.run(
+                        ["tmux", "kill-session", "-t", name],
+                        check=False,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    emit_event("INFO", f"auto-closed idle agent: {name}")
+                except Exception:
+                    pass
+
+
 def git_thread():
     """Poll git status of whatever project is currently bound to each panel."""
     while True:
@@ -327,10 +473,13 @@ def handle_connect():
 def handle_disconnect():
     sid_ptys = ptys.pop(request.sid, {})
     for slot in sid_ptys.values():
-        try:
-            slot["bridge"].close()
-        except Exception:
-            pass
+        for key in ("bridge", "bash_bridge"):
+            br = slot.get(key)
+            if br:
+                try:
+                    br.close()
+                except Exception:
+                    pass
     emit_event("INFO", f"client disconnected · {request.sid[:6]}")
 
 
@@ -343,10 +492,6 @@ def _resolve_project(name):
 
 @socketio.on("term_open")
 def handle_term_open(data):
-    import time as _time
-    t0 = _time.time()
-    print(f"[TIMING] term_open START panel={data.get('panel')} project={data.get('project')}")
-
     sid = request.sid
     panel = int(data.get("panel", 0))
     project_name = data.get("project")
@@ -393,10 +538,13 @@ def handle_term_open(data):
 
     sid_ptys = ptys.setdefault(sid, {})
     if panel in sid_ptys:
-        try:
-            sid_ptys[panel]["bridge"].close()
-        except Exception:
-            pass
+        for key in ("bridge", "bash_bridge"):
+            br = sid_ptys[panel].get(key)
+            if br:
+                try:
+                    br.close()
+                except Exception:
+                    pass
 
     def on_data(chunk, _sid=sid, _panel=panel):
         socketio.emit(
@@ -405,19 +553,13 @@ def handle_term_open(data):
             to=_sid,
         )
         try:
-            scan_pty_signals(_panel, chunk)
+            scan_pty_signals(_sid, _panel, chunk)
         except Exception:
             pass
 
-    print(f"[TIMING] term_open SHELL_CMD built: {_time.time()-t0:.3f}s")
-    print(f"[TIMING] shell_cmd: {shell_cmd[:100]}...")
-
     bridge = PtyBridge(argv, on_data, rows=rows, cols=cols)
-    print(f"[TIMING] term_open PTY BRIDGE created: {_time.time()-t0:.3f}s")
-
     sid_ptys[panel] = {"bridge": bridge, "project": project_name, "agent": agent}
     active_projects[panel] = project_name
-    print(f"[TIMING] term_open DONE: {_time.time()-t0:.3f}s")
     emit_event("INFO", f"opened {project_name or '?'} ({agent}) on panel {panel}")
 
 
@@ -427,6 +569,12 @@ def handle_term_input(data):
     slot = ptys.get(request.sid, {}).get(panel)
     if slot:
         slot["bridge"].write(data.get("data", ""))
+        # User just acted on the panel — clear the awaiting-input border pulse.
+        socketio.emit(
+            "panel_awaiting",
+            {"panel": panel, "awaiting": False},
+            to=request.sid,
+        )
 
 
 @socketio.on("term_resize")
@@ -442,7 +590,84 @@ def handle_term_close(data):
     panel = int(data.get("panel", 0))
     slot = ptys.get(request.sid, {}).pop(panel, None)
     if slot:
-        slot["bridge"].close()
+        for key in ("bridge", "bash_bridge"):
+            br = slot.get(key)
+            if br:
+                try:
+                    br.close()
+                except Exception:
+                    pass
+
+
+# ---------------------------------------------------------------------------
+# Socket: bottom-of-panel bash terminal (per-panel, rooted at project path)
+# ---------------------------------------------------------------------------
+@socketio.on("term_bash_open")
+def handle_term_bash_open(data):
+    sid = request.sid
+    panel = int(data.get("panel", 0))
+    rows = int(data.get("rows", 15))
+    cols = int(data.get("cols", 120))
+
+    slot = ptys.get(sid, {}).get(panel)
+    if not slot:
+        return  # agent terminal must exist first — that's where we get the project from
+
+    proj = _resolve_project(slot.get("project")) if slot.get("project") else None
+    cwd = (proj.get("path") if proj else None) or os.path.expanduser("~")
+    if not os.path.isdir(cwd):
+        cwd = os.path.expanduser("~")
+
+    # Close any prior bash bridge for this panel before spawning a fresh one.
+    old = slot.get("bash_bridge")
+    if old:
+        try:
+            old.close()
+        except Exception:
+            pass
+
+    shell = os.environ.get("SHELL", "/bin/bash")
+    inner = f"cd {cwd!r} && exec {shell} -i"
+
+    def on_data(chunk, _sid=sid, _panel=panel):
+        socketio.emit(
+            "term_bash_output",
+            {"panel": _panel, "data": chunk.decode("utf-8", errors="replace")},
+            to=_sid,
+        )
+
+    bridge = PtyBridge(["/bin/bash", "-lc", inner], on_data, rows=rows, cols=cols)
+    slot["bash_bridge"] = bridge
+
+
+@socketio.on("term_bash_input")
+def handle_term_bash_input(data):
+    panel = int(data.get("panel", 0))
+    slot = ptys.get(request.sid, {}).get(panel)
+    if slot and slot.get("bash_bridge"):
+        slot["bash_bridge"].write(data.get("data", ""))
+
+
+@socketio.on("term_bash_resize")
+def handle_term_bash_resize(data):
+    panel = int(data.get("panel", 0))
+    slot = ptys.get(request.sid, {}).get(panel)
+    if slot and slot.get("bash_bridge"):
+        slot["bash_bridge"].resize(
+            int(data.get("rows", 15)), int(data.get("cols", 120))
+        )
+
+
+@socketio.on("term_bash_close")
+def handle_term_bash_close(data):
+    panel = int(data.get("panel", 0))
+    slot = ptys.get(request.sid, {}).get(panel)
+    if slot and slot.get("bash_bridge"):
+        try:
+            slot["bash_bridge"].close()
+        except Exception:
+            pass
+        slot["bash_bridge"] = None
 
 
 @socketio.on("agent_switch")
@@ -470,6 +695,7 @@ if __name__ == "__main__":
     socketio.start_background_task(network_thread)
     socketio.start_background_task(weather_thread)
     socketio.start_background_task(git_thread)
+    socketio.start_background_task(tmux_janitor)
     port = int(os.environ.get("CC_PORT", 5050))
     print(f"⚡ commandcenter on http://0.0.0.0:{port} (tmux={'on' if tmux.is_available() else 'off'})")
     socketio.run(app, host="0.0.0.0", port=port)
