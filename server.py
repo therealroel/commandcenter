@@ -458,9 +458,10 @@ def scan_pty_signals(sid, panel, chunk):
 
 
 # ---------------------------------------------------------------------------
-# Background telemetry threads
+# Background telemetry threads - run independently, don't block each other
 # ---------------------------------------------------------------------------
 def metrics_thread():
+    import random
     while True:
         try:
             m = system_service.get_metrics()
@@ -482,21 +483,22 @@ def metrics_thread():
                 "ram_total": f"{m['ram']['total_gb']}G",
                 "cpu_temp": m["cpu"]["temp_c"],
                 "cpu_cores": m["cpu"]["cores"],
-            })
+            }, broadcast=True, namespace="/")
         except Exception as exc:
             print("metrics_thread err:", exc)
-        gevent.sleep(1)
+        gevent.sleep(2 + random.random() * 0.5)
 
 
 def network_thread():
+    import random
     prev = psutil.net_io_counters()
     prev_t = time.time()
     while True:
-        gevent.sleep(1)
+        gevent.sleep(1.5 + random.random() * 0.5)
         try:
             cur = psutil.net_io_counters()
             now = time.time()
-            dt = max(0.1, now - prev_t)
+            dt = max(0.5, now - prev_t)
             rx_bps = (cur.bytes_recv - prev.bytes_recv) / dt
             tx_bps = (cur.bytes_sent - prev.bytes_sent) / dt
             prev, prev_t = cur, now
@@ -505,7 +507,7 @@ def network_thread():
                 "tx_bps": tx_bps,
                 "rx_total": cur.bytes_recv,
                 "tx_total": cur.bytes_sent,
-            })
+            }, broadcast=True, namespace="/")
         except Exception as exc:
             print("network_thread err:", exc)
 
