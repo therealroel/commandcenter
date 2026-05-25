@@ -1009,6 +1009,216 @@ body::after {
   text-shadow: 0 0 6px rgba(0,217,255,0.5);
 }
 
+.menu-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.menu-btn:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.menu-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+.menu-overlay.open {
+  display: flex;
+}
+.menu-panel {
+  background: var(--card);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 16px 64px rgba(0,0,0,0.5);
+}
+.menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--cyan);
+  letter-spacing: 0.1em;
+}
+.menu-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.menu-close:hover { color: var(--text-primary); }
+.menu-body {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(80vh - 50px);
+}
+.menu-section {
+  margin-bottom: 24px;
+}
+.menu-section:last-child {
+  margin-bottom: 0;
+}
+.menu-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+.menu-section-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+.menu-item-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.menu-item-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.menu-action-btn {
+  width: 100%;
+  background: rgba(0,217,255,0.1);
+  border: 1px solid var(--cyan);
+  border-radius: 4px;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.menu-action-btn:hover {
+  background: rgba(0,217,255,0.2);
+}
+.menu-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+.form-group label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.form-group input {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 8px 10px;
+  transition: border-color 0.15s;
+}
+.form-group input:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+.form-group input::placeholder {
+  color: var(--text-dim);
+}
+
+.menu-toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-2);
+  border-radius: 4px;
+}
+.menu-toggle-item .menu-item-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--border);
+  border-radius: 24px;
+  transition: 0.3s;
+}
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  transition: 0.3s;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--cyan);
+}
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
 .strip-chip .strip-x {
   display: none;
   margin-left: 6px;
@@ -1091,6 +1301,49 @@ body::after {
   color: var(--cyan);
 }
 
+.config-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: default;
+  margin-left: 4px;
+  position: relative;
+}
+.config-indicator.subscription {
+  background: rgba(0, 100, 255, 0.2);
+  color: #4488ff;
+  border: 1px solid #4488ff;
+}
+.config-indicator.bedrock {
+  background: rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+  border: 1px solid #888;
+}
+.config-indicator .config-tooltip {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+  z-index: 9999;
+  margin-bottom: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.config-indicator:hover .config-tooltip {
+  display: block;
+}
+
 /* ============= AGENT DROPDOWN ============= */
 .agent-dropdown {
   position: absolute;
@@ -1138,37 +1391,6 @@ body::after {
 .agent-dropdown-item .dot.claude { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
 .agent-dropdown-item .dot.codex { background: var(--magenta); box-shadow: 0 0 6px var(--magenta); }
 .agent-btn { position: relative; }
-
-.config-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: var(--card);
-  border: 1px solid var(--border-bright);
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  transition: all 0.15s ease;
-}
-.config-btn:hover {
-  border-color: var(--cyan);
-  box-shadow: 0 0 10px rgba(0,217,255,0.2);
-  color: var(--text-primary);
-}
-.config-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--yellow);
-  box-shadow: 0 0 6px var(--yellow);
-}
-.config-btn.bedrock .config-dot { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
-.config-btn.subscription .config-dot { background: var(--magenta); box-shadow: 0 0 6px var(--magenta); }
 
 .win-controls {
   display: none;
@@ -1506,14 +1728,58 @@ body::after {
     <div class="header-pill"><span class="label">WX</span><span id="weather-display">--</span></div>
     <div class="header-pill"><span class="label">USR</span><span class="greeting" id="username-display">{{ username }}</span></div>
     <div class="header-pill"><span class="label">DATE</span><span id="date-display">--</span></div>
-    <button class="config-btn" id="config-btn" title="Switch Claude config">
-      <span class="config-dot" id="config-dot"></span>
-      <span id="config-name">--</span>
-    </button>
+    <button class="menu-btn" id="settings-btn">⚙️</button>
     <div class="win-controls" id="win-controls">
       <button class="win-btn minimize" id="win-minimize" title="Minimize">─</button>
       <button class="win-btn maximize" id="win-maximize" title="Fullscreen">□</button>
       <button class="win-btn close" id="win-close" title="Close">×</button>
+    </div>
+  </div>
+  <div class="menu-overlay" id="menu-overlay">
+    <div class="menu-panel">
+      <div class="menu-header">
+        <span>SETTINGS</span>
+        <button class="menu-close" id="menu-close">×</button>
+      </div>
+      <div class="menu-body">
+        <div class="menu-section">
+          <div class="menu-section-title">CLAUDE API CONFIG</div>
+          <div class="menu-section-desc">Switch between Bedrock (AWS) and Subscription (Anthropic). Use this if you have both accounts.</div>
+          <div class="menu-item">
+            <span class="menu-item-label">Current Config:</span>
+            <span class="menu-item-value" id="config-value">Loading...</span>
+          </div>
+          <div class="menu-item" id="bedrock-status-item">
+            <span class="menu-item-label">Bedrock Config:</span>
+            <span class="menu-item-value" id="bedrock-status">Checking...</span>
+          </div>
+          <div id="bedrock-setup" style="display:none;">
+            <div class="menu-section-desc" style="margin-top:12px;">No Bedrock config found. Enter your AWS credentials to create one:</div>
+            <div class="form-group">
+              <label>AWS Region</label>
+              <input type="text" id="bedrock-region" placeholder="e.g. eu-north-1" value="eu-north-1">
+            </div>
+            <div class="form-group">
+              <label>AWS Bearer Token</label>
+              <input type="password" id="bedrock-token" placeholder="bedrock-api-key-...">
+            </div>
+            <button class="menu-action-btn" id="save-bedrock-btn">Save Bedrock Config</button>
+          </div>
+          <button class="menu-action-btn" id="config-switch-btn">Switch to Subscription</button>
+          <div class="menu-note" id="config-note"></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-section-title">SESSION CLEANUP</div>
+          <div class="menu-section-desc">Auto-close idle agent sessions after 5 minutes of inactivity. Only closes sessions that were never used.</div>
+          <div class="menu-toggle-item">
+            <span class="menu-item-label">Auto-close idle sessions</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="auto-close-toggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -1582,6 +1848,10 @@ body::after {
         <span class="a-name" id="agent-name-0">opencode</span>
         <span class="a-cycle">↻</span>
       </button>
+      <span class="config-indicator" id="config-ind-0" data-config="subscription" title="">
+        <span class="config-icon">S</span>
+        <span class="config-tooltip"></span>
+      </span>
       <span class="panel-project">commandcenter</span>
       <span class="git-pill" id="git-0" title="git status">--</span>
       <button class="term-toggle" data-panel="0" title="Toggle bash terminal in this channel">Terminal</button>
@@ -1598,6 +1868,10 @@ body::after {
         <span class="a-name" id="agent-name-1">claude</span>
         <span class="a-cycle">↻</span>
       </button>
+      <span class="config-indicator" id="config-ind-1" data-config="subscription" title="">
+        <span class="config-icon">S</span>
+        <span class="config-tooltip"></span>
+      </span>
       <span class="panel-project">aws-infra</span>
       <span class="git-pill" id="git-1" title="git status">--</span>
       <button class="term-toggle" data-panel="1" title="Toggle bash terminal in this channel">Terminal</button>
@@ -1614,6 +1888,10 @@ body::after {
         <span class="a-name" id="agent-name-2">claude</span>
         <span class="a-cycle">↻</span>
       </button>
+      <span class="config-indicator" id="config-ind-2" data-config="subscription" title="">
+        <span class="config-icon">S</span>
+        <span class="config-tooltip"></span>
+      </span>
       <span class="panel-project">--</span>
       <span class="git-pill" id="git-2" title="git status">--</span>
       <button class="term-toggle" data-panel="2" title="Toggle bash terminal in this channel">Terminal</button>
@@ -1776,8 +2054,10 @@ body::after {
     timeout: 20000,
     reconnection: true,
     reconnectionDelay: 1000,
-    reconnectionAttempts: 5
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: Infinity
   });
+  let socketEverConnected = false;
 
   /* ===== WINDOW CONTROLS ===== */
   const winControls = document.getElementById('win-controls');
@@ -1819,42 +2099,6 @@ body::after {
   });
   winClose.addEventListener('click', () => window.close());
 
-  /* ===== CONFIG SWITCH ===== */
-  let currentConfig = 'unknown';
-
-  function updateConfigUI(profile) {
-    const btn = document.getElementById('config-btn');
-    const dot = document.getElementById('config-dot');
-    const name = document.getElementById('config-name');
-    if (!btn) return;
-    currentConfig = profile;
-    btn.className = 'config-btn ' + profile;
-    dot.className = 'config-dot';
-    name.textContent = profile.toUpperCase();
-  }
-
-  function switchConfig() {
-    const next = currentConfig === 'bedrock' ? 'subscription' : 'bedrock';
-    if (confirm(`Switch to ${next.toUpperCase()} config?`)) {
-      fetch('/api/config/switch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: next })
-      }).then(r => r.json()).then(data => {
-        if (data.ok) {
-          updateConfigUI(next);
-        } else {
-          alert('Failed: ' + (data.error || 'unknown error'));
-        }
-      }).catch(err => alert('Error: ' + err));
-    }
-  }
-
-  document.getElementById('config-btn').addEventListener('click', switchConfig);
-
-  // Fetch initial config
-  fetch('/api/config').then(r => r.json()).then(data => updateConfigUI(data.profile)).catch(() => {});
-
   socket.on('connect', () => {
     document.querySelectorAll('.status-dot').forEach(dot => {
       dot.classList.remove('disconnected');
@@ -1863,6 +2107,27 @@ body::after {
     document.getElementById('live-dot').classList.remove('offline');
     document.getElementById('conn-status').textContent = 'ONLINE';
     document.getElementById('conn-detail').textContent = 'SOCKET · ESTABLISHED';
+
+    // On reconnect, re-open every panel's PTY so terminals stop hanging at the
+    // loader. New sid means the server lost our slot state, so we re-emit
+    // term_open. (Skip on the very first connect — initial open is driven by
+    // the project-init code that runs after we receive /api/projects.)
+    if (socketEverConnected && typeof terms !== 'undefined') {
+      Object.keys(terms).forEach(panelId => {
+        const p = panels[panelId];
+        const proj = panelProject[panelId];
+        if (!p || !proj) return;
+        const agentName = AGENTS[p.agentIdx].name;
+        socket.emit('term_open', {
+          panel: Number(panelId),
+          project: proj,
+          agent: agentName,
+          rows: 40,
+          cols: 120,
+        });
+      });
+    }
+    socketEverConnected = true;
   });
 
   socket.on('disconnect', () => {
@@ -1873,6 +2138,12 @@ body::after {
     document.getElementById('live-dot').classList.add('offline');
     document.getElementById('conn-status').textContent = 'OFFLINE';
     document.getElementById('conn-detail').textContent = 'SOCKET · LOST';
+
+    // If a panel is still on the loading screen, swap the label so it's clear
+    // the hang is socket-side, not agent-side.
+    document.querySelectorAll('.term-loading-text').forEach(el => {
+      el.textContent = 'WAITING FOR SOCKET...';
+    });
   });
 
   /* ===== TERMINALS (xterm.js + PTY bridge) ===== */
@@ -1882,6 +2153,53 @@ body::after {
   const panelProject = { 0: null, 1: null, 2: null };
   const terms = {};
   window.terms = terms; // expose for debugging
+
+  /* ===== SETTINGS PERSISTENCE ===== */
+  const SETTINGS_KEY = 'cc_settings';
+  function saveSettings() {
+    const data = {
+      panelCount,
+      panelProject,
+      agents: panels.map(p => p.agentIdx),
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+  }
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+  function restoreSettings(saved) {
+    if (!saved) return;
+    if (saved.panelCount) {
+      panelCount = saved.panelCount;
+      document.querySelectorAll('#layout-switch button').forEach(b => {
+        b.classList.toggle('on', parseInt(b.dataset.count) === panelCount);
+      });
+      mainEl.setAttribute('data-panels', panelCount);
+      document.querySelectorAll('.chat-panel').forEach((p, i) => {
+        p.setAttribute('data-hidden', i >= panelCount ? '1' : '0');
+      });
+    }
+    if (saved.panelProject) {
+      Object.assign(panelProject, saved.panelProject);
+    }
+    if (saved.agents) {
+      saved.agents.forEach((idx, i) => {
+        if (panels[i] && idx < AGENTS.length) {
+          panels[i].agentIdx = idx;
+        }
+      });
+    }
+    // Apply to UI after restoring data
+    for (let i = 0; i < 3; i++) {
+      if (panelProject[i]) applyProjectToPanel(i);
+    }
+  }
 
   const TERM_THEME = {
     background: '#05080d',
@@ -1999,6 +2317,30 @@ body::after {
     if (!t) return;
     showTermIfReady(msg.panel);
     t.term.write(msg.data);
+  });
+
+  socket.on('term_opened', (msg) => {
+    const ind = document.getElementById(`config-ind-${msg.panel}`);
+    if (!ind) return;
+    // Only show config indicator for claude agent
+    if (msg.agent !== 'claude') {
+      ind.style.display = 'none';
+      return;
+    }
+    ind.style.display = '';
+    ind.dataset.config = msg.config;
+    const icon = ind.querySelector('.config-icon');
+    const tooltip = ind.querySelector('.config-tooltip');
+    if (msg.config === 'bedrock') {
+      icon.textContent = 'B';
+      tooltip.textContent = 'bedrock mode';
+      ind.className = 'config-indicator bedrock';
+    } else {
+      icon.textContent = 'S';
+      const user = msg.user || 'subscription';
+      tooltip.textContent = user === 'subscription' ? 'subscription mode' : user + ' · subscription';
+      ind.className = 'config-indicator subscription';
+    }
   });
 
   /* ===== BOTTOM BASH TERMINAL (per-panel, rooted at project path) ===== */
@@ -2132,6 +2474,153 @@ body::after {
     });
   });
 
+  /* ===== SETTINGS MENU ===== */
+  async function loadConfigProfile() {
+    try {
+      const r = await fetch('/api/config');
+      const j = await r.json();
+      const profile = j.profile || 'unknown';
+      document.getElementById('config-value').textContent = profile.toUpperCase();
+      const btn = document.getElementById('config-switch-btn');
+      const note = document.getElementById('config-note');
+      if (profile === 'bedrock') {
+        btn.textContent = 'Switch to Subscription';
+        note.textContent = 'Uses AWS Bedrock for AI responses';
+      } else {
+        btn.textContent = 'Switch to Bedrock';
+        note.textContent = 'Uses Anthropic subscription for AI responses';
+      }
+      // Check if bedrock config exists
+      checkBedrockConfig();
+    } catch (e) {
+      document.getElementById('config-value').textContent = 'Error';
+    }
+  }
+
+  async function checkBedrockConfig() {
+    try {
+      const res = await fetch('/api/config/check-bedrock');
+      const data = await res.json();
+      const statusEl = document.getElementById('bedrock-status');
+      const setupEl = document.getElementById('bedrock-setup');
+      const switchBtn = document.getElementById('config-switch-btn');
+      if (data.exists) {
+        statusEl.textContent = 'Configured';
+        statusEl.style.color = 'var(--green)';
+        setupEl.style.display = 'none';
+        switchBtn.style.display = 'block';
+      } else {
+        statusEl.textContent = 'Not configured';
+        statusEl.style.color = 'var(--red)';
+        setupEl.style.display = 'block';
+        switchBtn.style.display = 'none';
+      }
+    } catch (e) {
+      document.getElementById('bedrock-status').textContent = 'Error';
+    }
+  }
+
+  document.getElementById('save-bedrock-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('save-bedrock-btn');
+    const region = document.getElementById('bedrock-region').value.trim();
+    const token = document.getElementById('bedrock-token').value.trim();
+    if (!region || !token) {
+      alert('Please fill in both AWS Region and Bearer Token');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+      const res = await fetch('/api/config/save-bedrock', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({region, token})
+      });
+      const data = await res.json();
+      if (data.ok) {
+        btn.textContent = 'Saved!';
+        checkBedrockConfig();
+      } else {
+        btn.textContent = 'Error: ' + (data.error || 'failed');
+      }
+    } catch (e) {
+      btn.textContent = 'Error occurred';
+    }
+    btn.disabled = false;
+  });
+
+  document.getElementById('config-switch-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('config-switch-btn');
+    btn.disabled = true;
+    btn.textContent = 'Switching...';
+    try {
+      const r = await fetch('/api/config');
+      const j = await r.json();
+      const current = j.profile || 'subscription';
+      const target = current === 'bedrock' ? 'subscription' : 'bedrock';
+      const res = await fetch('/api/config/switch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({profile: target})
+      });
+      const result = await res.json();
+      if (result.error) {
+        btn.textContent = 'Error: ' + result.error;
+        setTimeout(loadConfigProfile, 1500);
+      } else {
+        btn.textContent = 'Switched to ' + target + '!';
+        setTimeout(loadConfigProfile, 1000);
+      }
+    } catch (e) {
+      btn.textContent = 'Error occurred';
+    }
+    btn.disabled = false;
+  });
+
+  // Auto-close idle sessions toggle
+  const autoCloseToggle = document.getElementById('auto-close-toggle');
+  autoCloseToggle.addEventListener('change', async () => {
+    const enabled = autoCloseToggle.checked;
+    try {
+      await fetch('/api/settings/auto-close-idle', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled})
+      });
+    } catch (e) {
+      console.error('Failed to save auto-close setting');
+    }
+  });
+
+  // Load auto-close setting on menu open
+  const settingsBtn = document.getElementById('settings-btn');
+  const menuOverlay = document.getElementById('menu-overlay');
+  const menuClose = document.getElementById('menu-close');
+  settingsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menuOverlay.classList.add('open');
+    loadConfigProfile();
+    loadAutoCloseSetting();
+  });
+  menuClose.addEventListener('click', () => {
+    menuOverlay.classList.remove('open');
+  });
+  menuOverlay.addEventListener('click', (e) => {
+    if (e.target === menuOverlay) {
+      menuOverlay.classList.remove('open');
+    }
+  });
+
+  async function loadAutoCloseSetting() {
+    try {
+      const r = await fetch('/api/settings/auto-close-idle');
+      const j = await r.json();
+      autoCloseToggle.checked = j.enabled;
+    } catch (e) {
+      console.error('Failed to load auto-close setting');
+    }
+  }
+
   /* ===== AWAITING-INPUT BORDER PULSE ===== */
   socket.on('panel_awaiting', (msg) => {
     const panel = document.getElementById(`panel-${msg.panel}`);
@@ -2206,17 +2695,22 @@ body::after {
     document.querySelectorAll('.chat-panel').forEach((p, i) => {
       p.setAttribute('data-hidden', i >= count ? '1' : '0');
     });
-    // Assign projects to newly visible panels (but don't open terminals yet)
+    // Assign projects to newly visible panels and open terminals
     for (let i = 0; i < count; i++) {
       if (!panelProject[i] && PROJECT_LIST[i]) {
         panelProject[i] = PROJECT_LIST[i].name;
+      }
+      if (panelProject[i]) {
         applyProjectToPanel(i);
+        openTerm(i);
       }
     }
     // Resize existing terminals
     Object.values(terms).forEach(t => { try { t.fit.fit(); } catch(e) {} });
     // Re-render strip to update channel badges and open project count
     renderProjectsStrip();
+    // Persist settings
+    saveSettings();
   });
 
   async function deleteProject(name) {
@@ -2232,12 +2726,23 @@ body::after {
       const j = await r.json();
       PROJECT_LIST = j.projects || [];
       document.getElementById('tmux-status').textContent = 'TMUX · ' + (j.tmux ? 'ON' : 'OFF');
-      // Initial panel bindings: first two projects, or whatever is available
-      panelProject[0] = PROJECT_LIST[0] ? PROJECT_LIST[0].name : null;
-      panelProject[1] = PROJECT_LIST[1] ? PROJECT_LIST[1].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
-      applyProjectToPanel(0);
-      applyProjectToPanel(1);
+      // Restore saved settings or use defaults
+      const saved = loadSettings();
+      restoreSettings(saved);
+      if (!saved) {
+        // Default: first two projects
+        panelProject[0] = PROJECT_LIST[0] ? PROJECT_LIST[0].name : null;
+        panelProject[1] = PROJECT_LIST[1] ? PROJECT_LIST[1].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
+        panelProject[2] = PROJECT_LIST[2] ? PROJECT_LIST[2].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
+      }
+      // Apply to UI
+      for (let i = 0; i < 3; i++) {
+        if (panelProject[i]) applyProjectToPanel(i);
+      }
       renderProjectsStrip();
+      // Open terminals for all visible panels with projects
+      panels.filter(p => p.id < panelCount && panelProject[p.id]).forEach(p => openTerm(p.id));
+      opened = true; // prevent maybeBoot from running after us
     } catch (e) {
       console.error('loadProjects failed', e);
     }
@@ -2270,6 +2775,7 @@ body::after {
     document.getElementById('agent-list').textContent =
       panels.map(p => `${panelProject[p.id] || '?'}:${AGENTS[p.agentIdx].name}`).join(' · ');
     renderProjectsStrip();
+    saveSettings();
   }
 
   /* ===== network sparkline ===== */
@@ -2599,7 +3105,12 @@ body::after {
     if (!PROJECT_LIST.length) return;
     if (!socket.connected) return;
     opened = true;
-    panels.forEach(p => openTerm(p.id));
+    // Only open the panels that are actually visible in the current layout.
+    // Otherwise we'd spawn a third, projectless PTY in 2-panel mode and waste
+    // a tmux session per page load.
+    panels
+      .filter(p => p.id < panelCount && panelProject[p.id])
+      .forEach(p => openTerm(p.id));
   }
   socket.on('connect', maybeBoot);
   loadProjects().then(maybeBoot);
@@ -2762,6 +3273,7 @@ body::after {
     // swap PTY to new agent
     socket.emit('term_close', { panel: panelId });
     openTerm(panelId);
+    saveSettings();
   }
 
   document.querySelectorAll('.agent-btn').forEach(el => {

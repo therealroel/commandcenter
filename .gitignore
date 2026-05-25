@@ -11,3 +11,8 @@ config/projects.json.backup
 
 # Superpowers brainstorm artifacts
 .superpowers/
+
+# Local commandcenter settings (auto-created, not tracked)
+.claude/commandcenter_settings.json
+.claude/settings.bedrock-backup.json
+.claude/settings.anthropic-backup.json

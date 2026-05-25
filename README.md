@@ -137,8 +137,16 @@ config/
 ```
 
 ### Tech Stack
-- **Backend**: Flask, Flask-SocketIO, gevent
-- **Frontend**: Vanilla JS, xterm.js, Socket.IO client
+- **Backend**: Flask + Flask-SocketIO on gevent
+- **WebSocket**: `gevent-websocket`'s `WebSocketHandler` mounted explicitly on
+  `gevent.pywsgi.WSGIServer` (see `server.py` `__main__`). Flask-SocketIO's
+  auto-detection of the handler is unreliable, which leaves Socket.IO stuck on
+  long-polling — wiring the handler ourselves guarantees the upgrade. Do not
+  switch to `simple-websocket` without also replacing the PTY bridge: it
+  requires `async_mode='threading'`, which is incompatible with the gevent
+  monkey-patched blocking I/O the bridge depends on.
+- **Frontend**: Vanilla JS, xterm.js, Socket.IO client (infinite reconnect;
+  re-emits `term_open` on reconnect so PTYs survive a dropped socket)
 - **Terminal**: Real PTY via Python pty module, optional tmux wrapper
 
 ## Status Rail
