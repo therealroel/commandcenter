@@ -82,11 +82,11 @@ def _save_settings(data):
         pass
 
 def get_config_info():
-    """Get current config profile and user info if available - cached for 30s"""
+    """Get current config profile and user info if available - cached for 5s"""
     global _config_info_cache
     import time
     now = time.time()
-    if now - _config_info_cache.get("time", 0) < 30:
+    if now - _config_info_cache.get("time", 0) < 5:
         return _config_info_cache
 
     base = Path.home() / ".claude"
@@ -141,6 +141,7 @@ def api_config():
 
 @app.route("/api/config/switch", methods=["POST"])
 def api_config_switch():
+    global _config_info_cache
     data = request.get_json(force=True) or {}
     profile = data.get("profile")
     if profile not in ("bedrock", "subscription"):
@@ -154,6 +155,8 @@ def api_config_switch():
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         shutil.copy2(settings, settings.with_name(f"settings.json.bak-{ts}"))
         shutil.copy2(backup, settings)
+        # Invalidate cache so next request gets fresh data
+        _config_info_cache = {"profile": profile, "user": profile, "time": 0}
         return jsonify({"ok": True, "profile": profile})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
