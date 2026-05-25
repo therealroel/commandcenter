@@ -3,13 +3,13 @@
     {
       "name": "robostock",
       "path": "/home/thjo/projects/robostock",
-      "agent": "opencode",
+      "agent": "claude",
       "launch_on_start": true
     },
     {
       "name": "routercontrol",
       "path": "/home/thjo/projects/router-control",
-      "agent": "claude",
+      "agent": "codex",
       "launch_on_start": true
     },
     {
