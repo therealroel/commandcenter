@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -58,6 +59,11 @@ def check_rate_limit(ip):
         (ts, count) for ts, count in RATE_LIMIT_STORAGE[ip]
         if now - ts < RATE_LIMIT_WINDOW
     ]
+    
+    # Remove empty entries to prevent memory leak
+    if not RATE_LIMIT_STORAGE[ip]:
+        del RATE_LIMIT_STORAGE[ip]
+        return True
     
     # Sum counts
     total = sum(count for ts, count in RATE_LIMIT_STORAGE[ip])
@@ -252,7 +258,7 @@ def get_config_info():
                     logger.warning(f"Auth check failed (attempt {attempt + 1}/3): {e}")
                     if attempt == 2:  # Last attempt failed
                         user = "unknown"
-                    time.sleep(0.5)  # Brief wait before retry
+                    gevent.sleep(0.5)  # Brief wait before retry
     except Exception:
         profile = "unknown"
         user = None
@@ -380,6 +386,7 @@ def api_save_bedrock():
 
         with open(bedrock_backup, "w") as f:
             json.dump(bedrock_config, f, indent=2)
+        os.chmod(bedrock_backup, 0o600)
 
         logger.info("Bedrock config saved")
         return jsonify({"ok": True})
@@ -848,7 +855,8 @@ def git_thread():
                         "project": project_name,
                         "git": status,
                     })
-                except Exception:
+                except Exception as exc:
+                    logger.warning(f"git status failed for {project_name}: {exc}")
                     socketio.emit("git_update", {"panel": panel_id, "project": project_name, "git": None})
         except Exception as exc:
             logger.warning(f"git_thread error: {exc}")
@@ -929,6 +937,7 @@ def handle_term_open(data):
     if not os.path.isdir(cwd):
         cwd = os.getcwd()
 
+    safe_cwd = shlex.quote(cwd)
     agent_cmd = agent if agent in AGENT_CYCLE else "claude"
     # Session name includes project + panel (channel) + agent so each panel
     # gets its own tmux session. Switching agents keeps each one's session
@@ -941,12 +950,8 @@ def handle_term_open(data):
     fnm_setup = 'export PATH="$HOME/.local/share/fnm:$PATH"; eval "$(fnm env 2>/dev/null)" 2>/dev/null;'
 
     if tmux.is_available():
-        # Check if session already exists - clear history then attach (keeps
-        # AI conversation but removes scrollback replay lag). If not found,
-        # create new session with agent auto-restart loop. When agent exits
-        # (accidental close), it auto-restarts. User can manually exit to stop.
         shell_cmd = (
-            f"{fnm_setup} cd {cwd!r} && "
+            f"{fnm_setup} cd {safe_cwd} && "
             f"(tmux has-session -t {session!r} 2>/dev/null && "
             f"tmux clear-history -t {session!r} 2>/dev/null && "
             f"exec tmux attach-session -t {session!r} || "
@@ -956,7 +961,7 @@ def handle_term_open(data):
         )
     else:
         shell_cmd = (
-            f"{fnm_setup} cd {cwd!r} && "
+            f"{fnm_setup} cd {safe_cwd} && "
             f"(command -v {agent_cmd} >/dev/null && exec {agent_cmd} || exec bash -i)"
         )
     argv = ["/bin/bash", "-lc", shell_cmd]
