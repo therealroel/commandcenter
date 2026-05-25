@@ -648,6 +648,7 @@ def scan_pty_signals(sid, panel, chunk):
 # ---------------------------------------------------------------------------
 def metrics_thread():
     import random
+    logger.info("THREAD_START: metrics_thread")
     while True:
         try:
             m = system_service.get_metrics()
@@ -677,6 +678,7 @@ def metrics_thread():
 
 def network_thread():
     import random
+    logger.info("THREAD_START: network_thread")
     prev = psutil.net_io_counters()
     prev_t = time.time()
     while True:
@@ -723,7 +725,7 @@ def get_weather_emoji(condition):
         return "🌡️"
 
 def weather_thread():
-    # Emit weather every 60 seconds (more even distribution)
+    logger.info("THREAD_START: weather_thread")
     while True:
         try:
             data = weather_service.get_current()
@@ -767,15 +769,7 @@ def _sessions_in_use():
 
 
 def tmux_janitor():
-    """Auto-close background agent sessions that were never prompted.
-
-    Strict criteria so we never kill something the user is using:
-      • Session prefix `cc-` (only sessions we spawned)
-      • NOT currently bound to a visible panel on any client
-      • Session created at least 10 minutes ago (not just idle time)
-      • Pane content still matches a first-launch fingerprint
-      • Only runs if auto_close_idle setting is enabled
-    """
+    logger.info("THREAD_START: tmux_janitor")
     # Cache tmux availability since it doesn't change during runtime
     tmux_available = tmux.is_available()
 
@@ -834,7 +828,7 @@ def tmux_janitor():
 
 
 def git_thread():
-    """Poll git status of whatever project is currently bound to each panel."""
+    logger.info("THREAD_START: git_thread")
     while True:
         try:
             projects = {p["name"]: p for p in switcher.load_projects()}
@@ -1223,18 +1217,31 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    socketio.start_background_task(metrics_thread)
-    socketio.start_background_task(network_thread)
-    socketio.start_background_task(weather_thread)
-    socketio.start_background_task(git_thread)
-    socketio.start_background_task(tmux_janitor)
     port = int(os.environ.get("CC_PORT", 5050))
     logger.info(f"⚡ commandcenter on http://0.0.0.0:{port} (tmux={'on' if tmux.is_available() else 'off'})")
+    logger.info("STARTING background threads...")
+    socketio.start_background_task(metrics_thread)
+    logger.info("  -> metrics_thread started")
+    socketio.start_background_task(network_thread)
+    logger.info("  -> network_thread started")
+    socketio.start_background_task(weather_thread)
+    logger.info("  -> weather_thread started")
+    socketio.start_background_task(git_thread)
+    logger.info("  -> git_thread started")
+    socketio.start_background_task(tmux_janitor)
+    logger.info("  -> tmux_janitor started")
+    logger.info("ALL threads launched, starting server...")
     # Explicit gevent WSGIServer + WebSocketHandler — Flask-SocketIO's auto-
     # detection of gevent-websocket can fail silently, leaving Socket.IO stuck
     # on long-polling. Wiring the handler ourselves guarantees the upgrade.
     from gevent import pywsgi
     from geventwebsocket.handler import WebSocketHandler
-    pywsgi.WSGIServer(
-        ("0.0.0.0", port), app, handler_class=WebSocketHandler, log=None
-    ).serve_forever()
+    try:
+        pywsgi.WSGIServer(
+            ("0.0.0.0", port), app, handler_class=WebSocketHandler, log=None
+        ).serve_forever()
+    except Exception as exc:
+        logger.error(f"SERVER CRASHED: {exc}")
+        import traceback
+        logger.error(traceback.format_exc())
+        sys.exit(1)
