@@ -2135,7 +2135,15 @@ body::after {
       document.exitFullscreen().catch(() => {});
     }
   });
-  winClose.addEventListener('click', () => window.close());
+  winClose.addEventListener('click', () => {
+    // window.close() doesn't work in browsers unless window was opened by JS
+    // Instead, disconnect gracefully and show a "closed" state
+    if (confirm('Disconnect from CommandCenter?')) {
+      socket.disconnect();
+      document.getElementById('ticker').innerHTML =
+        '<span style="color:var(--yellow);">⚠ DISCONNECTED - refresh to reconnect</span>';
+    }
+  });
 
   socket.on('connect', () => {
     document.querySelectorAll('.status-dot').forEach(dot => {
@@ -2201,18 +2209,34 @@ body::after {
   /* ===== SETTINGS PERSISTENCE ===== */
   const SETTINGS_KEY = 'cc_settings';
   function saveSettings() {
-    const data = {
-      panelCount,
-      panelProject,
-      agents: panels.map(p => p.agentIdx),
-    };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+    try {
+      const data = {
+        panelCount,
+        panelProject,
+        agents: panels.map(p => p.agentIdx),
+      };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.warn('saveSettings failed:', e);
+    }
   }
   function loadSettings() {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (!raw) return null;
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // Validate structure before returning
+      if (typeof parsed !== 'object' || parsed === null) return null;
+      if (parsed.panelCount !== undefined && (typeof parsed.panelCount !== 'number' || parsed.panelCount < 1 || parsed.panelCount > 3)) {
+        return null;
+      }
+      if (parsed.panelProject !== undefined && typeof parsed.panelProject !== 'object') {
+        return null;
+      }
+      if (parsed.agents !== undefined && !Array.isArray(parsed.agents)) {
+        return null;
+      }
+      return parsed;
     } catch (e) {
       return null;
     }
@@ -2335,13 +2359,39 @@ body::after {
   function showTermIfReady(panelId) {
     const t = terms[panelId];
     if (!t || t.ready) return;
-    t.ready = true;
+
     const host = document.getElementById(`term-${panelId}`);
     if (!host) return;
+
+    // Check if the terminal is actually visible before trying to fit/open
+    // If panel is hidden (data-hidden="1"), skip and retry later
+    const panel = host.closest('.chat-panel');
+    if (panel && panel.getAttribute('data-hidden') === '1') return;
+
+    t.ready = true;
     host.innerHTML = '';
     t.term.open(host);
-    try { t.fit.fit(); } catch (e) {}
-    t.term.focus();
+
+    // Fit with retry on failure
+    let fitAttempts = 0;
+    const maxAttempts = 3;
+    function attemptFit() {
+      try {
+        t.fit.fit();
+        // Verify fit actually worked by checking terminal dimensions
+        if (t.term.rows > 0 && t.term.cols > 0) {
+          t.term.focus();
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
+      fitAttempts++;
+      if (fitAttempts < maxAttempts) {
+        setTimeout(attemptFit, 50);
+      }
+    }
+    attemptFit();
 
     // Forward mouse wheel to tmux (which has mouse mode on)
     // Forward mouse wheel to tmux for scrolling
@@ -2720,7 +2770,7 @@ body::after {
   // strip "+ ADD PROJECT" button: open palette straight to browse mode
   document.getElementById('strip-add').addEventListener('click', () => {
     openPalette(focusedPanel);
-    setTimeout(() => startBrowse(null), 60);
+    startBrowse(null);  // Call immediately, not with setTimeout
   });
 
   // Layout switcher (1, 2, 3 panels)
@@ -2855,8 +2905,13 @@ body::after {
     const g = msg.git;
     el.className = 'git-pill ' + (g.dirty ? 'dirty-state' : 'clean');
     const parts = [`<span class="branch">${escapeHtml(g.branch || '?')}</span>`];
-    if (g.ahead) parts.push(`<span class="ahead">↑${g.ahead}</span>`);
-    if (g.behind) parts.push(`<span class="behind">↓${g.behind}</span>`);
+    // Show upstream indicator if no upstream configured
+    if (g.upstream === false) {
+      parts.push(`<span class="ahead" title="No upstream configured">∅</span>`);
+    } else {
+      if (g.ahead) parts.push(`<span class="ahead">↑${g.ahead}</span>`);
+      if (g.behind) parts.push(`<span class="behind">↓${g.behind}</span>`);
+    }
     if (g.dirty) parts.push(`<span class="dirty">●</span>`);
     el.innerHTML = parts.join(' ');
   });
