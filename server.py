@@ -1219,8 +1219,9 @@ if __name__ == "__main__":
         sys.exit(0)
 
     import signal
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    # Ignore SIGTERM/SIGINT - server runs until explicitly killed with SIGKILL
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     socketio.start_background_task(metrics_thread)
     socketio.start_background_task(network_thread)
