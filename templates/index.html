@@ -1903,11 +1903,12 @@ body::after {
 
 <!-- ============= FOOTER ============= -->
 <footer class="footer">
-  <div class="ticker" id="ticker"><span class="ticker-content t-INFO"><span class="ticker-type">INFO</span>commandcenter online · awaiting telemetry stream...</span></div>
+  <div class="ticker" id="ticker"><span class="ticker-content t-INFO"><span class="ticker-type">INFO</span>commandcenter online · waiting for data...</span></div>
   <div class="footer-section">
     <span class="event-counter" id="event-log-toggle">EVENTS · <span id="event-counter-num">0</span></span>
-    <span id="conn-detail">SOCKET · ESTABLISHED</span>
-    <span id="tmux-status">TMUX · ?</span>
+    <span id="socket-icon" style="color:var(--green);">●</span><span id="socket-label" style="color:var(--green);">SOCK</span>
+    <span id="tmux-icon" style="color:var(--green);">●</span><span id="tmux-label" style="color:var(--green);">TMUX</span>
+    <span id="server-icon" style="color:var(--green);">●</span><span id="server-label" style="color:var(--green);">SRV</span>
     <span>v{{ version }}</span>
   </div>
 </footer>
@@ -2031,6 +2032,43 @@ body::after {
   for (let i = 0; i < SPARK_LEN; i++) { sparkData.cpu.push(0); sparkData.ram.push(0); sparkData.net.push(0); }
   renderSpark('cpu'); renderSpark('ram'); renderSpark('net');
 
+  /* ===== HEALTH CHECK - detect stuck server ===== */
+  let serverStuckCount = 0;
+  async function healthCheck() {
+    try {
+      const r = await fetch('/api/health');
+      if (r.ok) {
+        const d = await r.json();
+        serverStuckCount = 0;
+        document.getElementById('server-icon').textContent = '●';
+        document.getElementById('server-icon').style.color = 'var(--green)';
+        document.getElementById('server-label').textContent = 'SRV';
+        document.getElementById('server-label').style.color = 'var(--green)';
+        document.getElementById('tmux-icon').textContent = '●';
+        document.getElementById('tmux-icon').style.color = d.tmux ? 'var(--green)' : 'var(--red)';
+        document.getElementById('tmux-label').textContent = 'TMUX';
+        document.getElementById('tmux-label').style.color = d.tmux ? 'var(--green)' : 'var(--red)';
+      } else {
+        serverStuckCount++;
+        document.getElementById('server-icon').textContent = '●';
+        document.getElementById('server-icon').style.color = 'var(--yellow)';
+        document.getElementById('server-label').textContent = 'SRV';
+        document.getElementById('server-label').style.color = 'var(--yellow)';
+      }
+    } catch (e) {
+      serverStuckCount++;
+      document.getElementById('server-icon').textContent = '●';
+      document.getElementById('server-icon').style.color = 'var(--red)';
+      document.getElementById('server-label').textContent = 'SRV';
+      document.getElementById('server-label').style.color = 'var(--red)';
+    }
+    if (serverStuckCount >= 3) {
+      document.getElementById('ticker').innerHTML = '<span style="color:var(--red);">⚠ SERVER UNRESPONSIVE - refresh page to reconnect</span>';
+    }
+  }
+  healthCheck();
+  setInterval(healthCheck, 30000);
+
   /* ===== AGENTS ===== */
   const AGENTS = [
     { name: 'opencode', emoji: '\u{1F7E2}', cls: 'opencode' },
@@ -2106,7 +2144,10 @@ body::after {
     });
     document.getElementById('live-dot').classList.remove('offline');
     document.getElementById('conn-status').textContent = 'ONLINE';
-    document.getElementById('conn-detail').textContent = 'SOCKET · ESTABLISHED';
+    document.getElementById('socket-icon').textContent = '●';
+    document.getElementById('socket-icon').style.color = 'var(--green)';
+    document.getElementById('socket-label').textContent = 'SOCK';
+    document.getElementById('socket-label').style.color = 'var(--green)';
 
     // On reconnect, re-open every panel's PTY so terminals stop hanging at the
     // loader. New sid means the server lost our slot state, so we re-emit
@@ -2137,7 +2178,10 @@ body::after {
     });
     document.getElementById('live-dot').classList.add('offline');
     document.getElementById('conn-status').textContent = 'OFFLINE';
-    document.getElementById('conn-detail').textContent = 'SOCKET · LOST';
+    document.getElementById('socket-icon').textContent = '●';
+    document.getElementById('socket-icon').style.color = 'var(--red)';
+    document.getElementById('socket-label').textContent = 'SOCK';
+    document.getElementById('socket-label').style.color = 'var(--red)';
 
     // If a panel is still on the loading screen, swap the label so it's clear
     // the hang is socket-side, not agent-side.
@@ -2725,7 +2769,11 @@ body::after {
       const r = await fetch('/api/projects');
       const j = await r.json();
       PROJECT_LIST = j.projects || [];
-      document.getElementById('tmux-status').textContent = 'TMUX · ' + (j.tmux ? 'ON' : 'OFF');
+      const tmuxOn = j.tmux;
+      document.getElementById('tmux-icon').textContent = '●';
+      document.getElementById('tmux-icon').style.color = tmuxOn ? 'var(--green)' : 'var(--red)';
+      document.getElementById('tmux-label').textContent = 'TMUX';
+      document.getElementById('tmux-label').style.color = tmuxOn ? 'var(--green)' : 'var(--red)';
       // Restore saved settings or use defaults
       const saved = loadSettings();
       restoreSettings(saved);

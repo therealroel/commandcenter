@@ -270,6 +270,17 @@ def favicon():
     return ("", 204)
 
 
+@app.route("/api/health")
+def api_health():
+    return jsonify({
+        "ok": True,
+        "tmux": tmux.is_available(),
+        "tmux_sessions": len(tmux.list_windows()) if tmux.is_available() else 0,
+        "active_ptys": sum(len(s) for s in ptys.values()),
+        "uptime": time.time(),
+    })
+
+
 @app.route("/api/version")
 def api_version():
     return jsonify({"version": __version__})
