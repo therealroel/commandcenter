@@ -9,7 +9,7 @@
     {
       "name": "routercontrol",
       "path": "/home/thjo/projects/router-control",
-      "agent": "codex",
+      "agent": "claude",
       "launch_on_start": true
     },
     {
