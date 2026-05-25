@@ -54,6 +54,74 @@ def index():
     return render_template("index.html", version=__version__, username=username)
 
 
+BACKUP_NAMES = {
+    "bedrock": "settings.bedrock-backup.json",
+    "subscription": "settings.anthropic-backup.json",
+}
+
+_config_info_cache = {"profile": "subscription", "user": "subscription", "time": 0}
+
+def _load_cc_settings():
+    """Load commandcenter settings from disk"""
+    settings_file = Path.home() / ".claude" / "commandcenter_settings.json"
+    try:
+        if settings_file.exists():
+            with open(settings_file) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"auto_close_idle": True}
+
+def _save_settings(data):
+    """Save commandcenter settings to disk"""
+    settings_file = Path.home() / ".claude" / "commandcenter_settings.json"
+    try:
+        with open(settings_file, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+def get_config_info():
+    """Get current config profile and user info if available - cached for 30s"""
+    global _config_info_cache
+    import time
+    now = time.time()
+    if now - _config_info_cache.get("time", 0) < 30:
+        return _config_info_cache
+
+    base = Path.home() / ".claude"
+    settings = base / "settings.json"
+    try:
+        with open(settings) as f:
+            data = json.load(f)
+        env = data.get("env", {})
+        if env.get("CLAUDE_CODE_USE_BEDROCK") == "1":
+            profile = "bedrock"
+            user = "bedrock"
+        else:
+            profile = "subscription"
+            user = None
+            try:
+                result = subprocess.check_output(
+                    ["claude", "auth", "status", "--json"],
+                    stderr=subprocess.DEVNULL,
+                    timeout=3
+                ).decode()
+                auth_data = json.loads(result)
+                email = auth_data.get("email")
+                if email:
+                    user = email
+                else:
+                    user = "logged in"
+            except Exception:
+                user = "subscription"
+    except Exception:
+        profile = "unknown"
+        user = None
+
+    _config_info_cache = {"profile": profile, "user": user, "time": now}
+    return {"profile": profile, "user": user}
+
 @app.route("/api/config")
 def api_config():
     base = Path.home() / ".claude"
@@ -79,7 +147,7 @@ def api_config_switch():
         return jsonify({"error": "invalid profile"}), 400
     base = Path.home() / ".claude"
     settings = base / "settings.json"
-    backup = base / f"settings.{profile}-backup.json"
+    backup = base / BACKUP_NAMES[profile]
     if not backup.exists():
         return jsonify({"error": f"backup not found: {backup}"}), 404
     try:
@@ -89,6 +157,108 @@ def api_config_switch():
         return jsonify({"ok": True, "profile": profile})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/config/save", methods=["POST"])
+def api_config_save():
+    """Save current settings as a backup profile, or save a profile to settings.json"""
+    data = request.get_json(force=True) or {}
+    action = data.get("action")
+    profile = data.get("profile")  # "bedrock" or "subscription"
+    if profile not in ("bedrock", "subscription"):
+        return jsonify({"error": "invalid profile"}), 400
+
+    base = Path.home() / ".claude"
+    settings = base / "settings.json"
+    backup = base / BACKUP_NAMES[profile]
+
+    if action == "save":
+        # Save current settings as the specified profile backup
+        try:
+            shutil.copy2(settings, backup)
+            return jsonify({"ok": True, "profile": profile})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    elif action == "apply":
+        # Apply the backup profile to current settings
+        if not backup.exists():
+            return jsonify({"error": f"backup not found: {backup}"}), 404
+        try:
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            shutil.copy2(settings, settings.with_name(f"settings.json.bak-{ts}"))
+            shutil.copy2(backup, settings)
+            return jsonify({"ok": True, "profile": profile})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"error": "invalid action"}), 400
+
+
+@app.route("/api/config/check-bedrock")
+def api_check_bedrock():
+    base = Path.home() / ".claude"
+    bedrock_backup = base / "settings.bedrock-backup.json"
+    return jsonify({"exists": bedrock_backup.exists()})
+
+
+@app.route("/api/config/save-bedrock", methods=["POST"])
+def api_save_bedrock():
+    """Create bedrock config from provided credentials, preserving other settings"""
+    data = request.get_json(force=True) or {}
+    region = data.get("region", "").strip()
+    token = data.get("token", "").strip()
+    if not region or not token:
+        return jsonify({"error": "region and token required"}), 400
+
+    base = Path.home() / ".claude"
+    settings = base / "settings.json"
+    bedrock_backup = base / "settings.bedrock-backup.json"
+
+    try:
+        # Read current settings to get base config (preserve all other settings)
+        with open(settings) as f:
+            current = json.load(f)
+
+        # Deep copy current settings for bedrock config
+        bedrock_config = json.loads(json.dumps(current))
+
+        # Update env section with bedrock credentials
+        if "env" not in bedrock_config:
+            bedrock_config["env"] = {}
+        bedrock_config["env"]["CLAUDE_CODE_USE_BEDROCK"] = "1"
+        bedrock_config["env"]["AWS_REGION"] = region
+        bedrock_config["env"]["AWS_BEARER_TOKEN_BEDROCK"] = token
+
+        # Remove CLAUDE_API_KEY since we're using bedrock
+        if "env" in bedrock_config and "CLAUDE_API_KEY" in bedrock_config["env"]:
+            del bedrock_config["env"]["CLAUDE_API_KEY"]
+
+        # Save as bedrock backup
+        with open(bedrock_backup, "w") as f:
+            json.dump(bedrock_config, f, indent=2)
+
+        return jsonify({"ok": True})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/settings/auto-close-idle")
+def api_get_auto_close_idle():
+    """Get auto-close idle sessions setting"""
+    settings = _load_cc_settings()
+    return jsonify({"enabled": settings.get("auto_close_idle", True)})
+
+
+@app.route("/api/settings/auto-close-idle", methods=["POST"])
+def api_set_auto_close_idle():
+    """Set auto-close idle sessions setting"""
+    data = request.get_json(force=True) or {}
+    enabled = data.get("enabled", True)
+    settings = _load_cc_settings()
+    settings["auto_close_idle"] = enabled
+    _save_settings(settings)
+    return jsonify({"ok": True, "enabled": enabled})
 
 
 @app.route("/favicon.ico")
@@ -207,6 +377,22 @@ AWAITING_PATTERNS = (
     "allow this tool",
 )
 
+# Real error indicators — anchored patterns, not loose substring matches.
+ERROR_RE = re.compile(
+    r"(?:^|\s)(?:Traceback \(most recent call last\)"
+    r"|[A-Z]\w*Error:\s"
+    r"|[A-Z]\w*Exception:\s"
+    r"|ERROR:\s"
+    r"|FATAL:\s"
+    r"|fatal:\s"
+    r"|error:\s)"
+)
+
+# Lines that look like claude-mem observation listings — skip entirely.
+# Examples: "#472 1:31PM 🔴 winControlsReferenceError..." or "[37/126] #466 🟣 ..."
+MEM_OBS_RE = re.compile(r"#\d{2,}\s*\d*[ap]?m?\s*[🔴🟣🔵✅⚖🚨🔐🟢🟡🟠]")
+MEM_PROGRESS_RE = re.compile(r"\[\d+/\d+\]")
+
 
 def scan_pty_signals(sid, panel, chunk):
     """Look for human-meaningful events inside raw PTY bytes."""
@@ -222,16 +408,18 @@ def scan_pty_signals(sid, panel, chunk):
     if "claude code v" in lowered or "───" in text:
         return
 
-    # Real errors: look for actual error messages, not UI chrome
-    if "error" in lowered or "traceback" in lowered:
-        for line in text.splitlines():
-            ll = line.lower().strip()
-            # Skip false positives
-            if not ll or "claude code" in ll or "───" in line:
-                continue
-            if "error" in ll or "Traceback" in line:
-                emit_event("ERROR", f"[CH{ch}] {line.strip()[:120]}")
-                break
+    # Real errors only — strict pattern, and skip claude-mem observation output.
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if MEM_OBS_RE.search(stripped) or MEM_PROGRESS_RE.search(stripped):
+            continue
+        if "claude code" in stripped.lower() or "───" in stripped:
+            continue
+        if ERROR_RE.search(stripped):
+            emit_event("ERROR", f"[CH{ch}] {stripped[:120]}")
+            break
 
     # Tool use
     if "● " in text:
@@ -240,8 +428,19 @@ def scan_pty_signals(sid, panel, chunk):
                 emit_event("TOOL", f"[CH{ch}] {l.strip()[:120]}")
                 break
 
-    if "thinking" in lowered and "thinking…" not in lowered:
-        emit_event("THINK", f"[CH{ch}] thinking…")
+    # Thinking indicator — only match Claude's standalone status line, not
+    # the substring "thinking" appearing inside other output.
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if MEM_OBS_RE.search(s) or MEM_PROGRESS_RE.search(s):
+            continue
+        # Claude prints lines like "✻ Thinking…" or "* Thinking" as its
+        # live-status indicator. Require it to be near the start of the line.
+        if re.match(r"^[*✻✱·●]?\s*Thinking[…\.\s]*$", s):
+            emit_event("THINK", f"[CH{ch}] thinking…")
+            break
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +564,7 @@ def _sessions_in_use():
         for panel, slot in sid_map.items():
             proj = slot.get("project") or f"panel{panel}"
             agent = slot.get("agent") or "claude"
-            in_use.add(f"cc-{proj}-{agent}")
+            in_use.add(f"cc-{proj}-{panel}-{agent}")
     return in_use
 
 
@@ -377,9 +576,13 @@ def tmux_janitor():
       • NOT currently bound to a visible panel on any client
       • Idle for at least 5 minutes
       • Pane content still matches a first-launch fingerprint
+      • Only runs if auto_close_idle setting is enabled
     """
     while True:
         gevent.sleep(60)
+        settings = _load_cc_settings()
+        if not settings.get("auto_close_idle", True):
+            continue
         if not tmux.is_available():
             continue
         try:
@@ -510,23 +713,26 @@ def handle_term_open(data):
         cwd = os.getcwd()
 
     agent_cmd = agent if agent in AGENT_CYCLE else "claude"
-    # Session name includes the agent so switching agents keeps each
-    # one's tmux session alive in the background. Switching back
-    # re-attaches to the existing session rather than starting fresh.
-    session = f"cc-{project_name or 'panel'+str(panel)}-{agent_cmd}"
+    # Session name includes project + panel (channel) + agent so each panel
+    # gets its own tmux session. Switching agents keeps each one's session
+    # alive in the background. Reattaching resumes existing conversation.
+    session = f"cc-{project_name or 'panel'}-{panel}-{agent_cmd}"
 
     # fnm (node version manager) setup for codex
     fnm_setup = 'export PATH="$HOME/.local/share/fnm:$PATH"; eval "$(fnm env 2>/dev/null)" 2>/dev/null;'
 
     if tmux.is_available():
-        # Check if session already exists - if so, just attach (fast resume)
-        # If not, create new session with the agent command
+        # Check if session already exists - clear history then attach (keeps
+        # AI conversation but removes scrollback replay lag). If not found,
+        # create new session with agent auto-restart loop. When agent exits
+        # (accidental close), it auto-restarts. User can manually exit to stop.
         shell_cmd = (
             f"{fnm_setup} cd {cwd!r} && "
             f"(tmux has-session -t {session!r} 2>/dev/null && "
+            f"tmux clear-history -t {session!r} 2>/dev/null && "
             f"exec tmux attach-session -t {session!r} || "
             f"(command -v {agent_cmd} >/dev/null && "
-            f"exec tmux new-session -s {session!r} {agent_cmd} || "
+            f"exec tmux new-session -s {session!r} 'while command -v {agent_cmd} >/dev/null 2>&1; do {agent_cmd}; sleep 1; done' || "
             f"exec bash -i))"
         )
     else:
@@ -560,6 +766,14 @@ def handle_term_open(data):
     bridge = PtyBridge(argv, on_data, rows=rows, cols=cols)
     sid_ptys[panel] = {"bridge": bridge, "project": project_name, "agent": agent}
     active_projects[panel] = project_name
+    config_info = get_config_info()
+    socketio.emit("term_opened", {
+        "panel": panel,
+        "project": project_name,
+        "agent": agent,
+        "config": config_info["profile"],
+        "user": config_info["user"]
+    })
     emit_event("INFO", f"opened {project_name or '?'} ({agent}) on panel {panel}")
 
 
@@ -698,4 +912,11 @@ if __name__ == "__main__":
     socketio.start_background_task(tmux_janitor)
     port = int(os.environ.get("CC_PORT", 5050))
     print(f"⚡ commandcenter on http://0.0.0.0:{port} (tmux={'on' if tmux.is_available() else 'off'})")
-    socketio.run(app, host="0.0.0.0", port=port)
+    # Explicit gevent WSGIServer + WebSocketHandler — Flask-SocketIO's auto-
+    # detection of gevent-websocket can fail silently, leaving Socket.IO stuck
+    # on long-polling. Wiring the handler ourselves guarantees the upgrade.
+    from gevent import pywsgi
+    from geventwebsocket.handler import WebSocketHandler
+    pywsgi.WSGIServer(
+        ("0.0.0.0", port), app, handler_class=WebSocketHandler, log=None
+    ).serve_forever()

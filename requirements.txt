@@ -1,7 +1,17 @@
+# commandcenter runtime dependencies
+#
+# WebSocket stack: gevent + gevent-websocket. We use gevent for the PTY bridge
+# (monkey-patched blocking I/O) and gevent-websocket's WebSocketHandler is
+# wired explicitly in server.py so Socket.IO upgrades polling -> websocket
+# reliably. simple-websocket is pulled in transitively by python-engineio but
+# is unused at runtime in gevent mode — do not switch to it without also
+# reworking services/pty_bridge.py.
+
 flask>=3.0
 flask-socketio>=5.4
 python-socketio>=5.11
+python-engineio>=4.10
+gevent>=24.2
+gevent-websocket>=0.10
 psutil
 requests
-gevent>=24.2
-gevent-websocket
