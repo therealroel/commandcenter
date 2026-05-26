@@ -81,6 +81,7 @@ The service is configured with `Restart=always` — if the server crashes, syste
 - **Linux** or **macOS** (Windows requires WSL)
 - Python 3.10+
 - tmux (recommended for session persistence)
+- **xclip** (for clipboard copy in tmux copy mode: `sudo apt install xclip`)
 - Default browser (Firefox, Chrome, Edge, etc.)
 - At least one AI coding agent installed
 
