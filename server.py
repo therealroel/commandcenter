@@ -963,7 +963,7 @@ def handle_term_open(data):
         shell_cmd = (
             f"{fnm_setup} cd {safe_cwd} && "
             f"(command -v {agent_cmd} >/dev/null && "
-            f"exec tmux new-session -s {session!r} 'while command -v {agent_cmd} >/dev/null 2>&1; do {agent_cmd}; sleep 1; done' || "
+            f"exec tmux new-session -s {session!r} -n {agent_cmd!r} 'while command -v {agent_cmd} >/dev/null 2>&1; do {agent_cmd}; sleep 1; done' || "
             f"exec bash -i)"
         )
     else:
