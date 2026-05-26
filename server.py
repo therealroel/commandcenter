@@ -2,7 +2,7 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
+import gevent.subprocess as subprocess
 import sys
 import time
 import json
@@ -131,6 +131,7 @@ def log_access():
     if request.path in ['/favicon.ico']:
         return
     ip = request.remote_addr or 'unknown'
+    request._start_time = time.time()
     logger.info(f"ACCESS {request.method} {request.path} from {ip} [{request.headers.get('User-Agent', 'unknown')[:50]}]")
 
 @app.after_request
@@ -139,7 +140,8 @@ def log_response(response):
     if request.path in ['/favicon.ico']:
         return response
     ip = request.remote_addr or 'unknown'
-    logger.info(f"RESPONSE {request.method} {request.path} -> {response.status_code} from {ip}")
+    elapsed = time.time() - getattr(request, '_start_time', time.time())
+    logger.info(f"RESPONSE {request.method} {request.path} -> {response.status_code} from {ip} ({elapsed:.3f}s)")
     return response
 
 @app.errorhandler(404)
@@ -204,7 +206,7 @@ def _load_cc_settings():
                 return json.load(f)
     except Exception:
         pass
-    return {"auto_close_idle": True}
+    return {"auto_close_idle": True, "panels": {}}
 
 def _save_settings(data):
     """Save commandcenter settings to disk"""
@@ -219,7 +221,7 @@ def get_config_info():
     """Get current config profile and user info if available - cached for 5s"""
     global _config_info_cache
     now = time.time()
-    if now - _config_info_cache.get("time", 0) < 5:
+    if now - _config_info_cache.get("time", 0) < 60:
         return _config_info_cache
 
     base = Path.home() / ".claude"
@@ -233,32 +235,7 @@ def get_config_info():
             user = "bedrock"
         else:
             profile = "subscription"
-            user = "checking..."
-            # Try with retry - 3 attempts with 1 second timeout each
-            for attempt in range(3):
-                try:
-                    result = subprocess.check_output(
-                        ["claude", "auth", "status", "--json"],
-                        stderr=subprocess.DEVNULL,
-                        timeout=2
-                    ).decode()
-                    auth_data = json.loads(result)
-                    email = auth_data.get("email")
-                    if email:
-                        user = email
-                    else:
-                        user = "logged in"
-                    logger.info(f"Auth check succeeded: {user}")
-                    break  # Success, exit retry loop
-                except subprocess.TimeoutExpired:
-                    logger.warning(f"Auth check timeout (attempt {attempt + 1}/3)")
-                    if attempt == 2:  # Last attempt failed
-                        user = "timeout"
-                except Exception as e:
-                    logger.warning(f"Auth check failed (attempt {attempt + 1}/3): {e}")
-                    if attempt == 2:  # Last attempt failed
-                        user = "unknown"
-                    gevent.sleep(0.5)  # Brief wait before retry
+        user = "subscription"
     except Exception:
         profile = "unknown"
         user = None
@@ -282,6 +259,22 @@ def api_config():
     except Exception:
         profile = "unknown"
     return jsonify({"profile": profile})
+
+
+@app.route("/api/auth/check")
+def api_auth_check():
+    """On-demand claude auth check - returns user email if logged in."""
+    try:
+        result = gevent.subprocess.check_output(
+            ["claude", "auth", "status", "--json"],
+            stderr=gevent.subprocess.DEVNULL,
+            timeout=5
+        ).decode()
+        auth_data = json.loads(result)
+        email = auth_data.get("email", "logged in")
+        return jsonify({"ok": True, "user": email})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 200
 
 
 @app.route("/api/config/switch", methods=["POST"])
@@ -449,6 +442,26 @@ def api_projects():
         "agents": AGENT_CYCLE,
         "tmux": tmux.is_available(),
     })
+
+
+@app.route("/api/panel-state")
+def api_panel_state():
+    settings = _load_cc_settings()
+    return jsonify(settings.get("panels", {}))
+
+
+@app.route("/api/panel-state", methods=["PUT"])
+def api_save_panel_state():
+    data = request.get_json(force=True) or {}
+    # data should be { "panels": { "0": {"project": "...", "agent": "..."}, ... } }
+    panels_data = data.get("panels", {})
+    if not isinstance(panels_data, dict):
+        return jsonify({"error": "invalid panels data"}), 400
+    settings = _load_cc_settings()
+    settings["panels"] = panels_data
+    _save_settings(settings)
+    logger.info(f"Saved panel state: {panels_data}")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/dirs")
@@ -854,7 +867,7 @@ def git_thread():
                     socketio.emit("git_update", {"panel": panel_id, "project": project_name, "git": None})
         except Exception as exc:
             logger.warning(f"git_thread error: {exc}")
-        gevent.sleep(5)
+        gevent.sleep(10)
 
 
 # ---------------------------------------------------------------------------
@@ -944,14 +957,14 @@ def handle_term_open(data):
     fnm_setup = 'export PATH="$HOME/.local/share/fnm:$PATH"; eval "$(fnm env 2>/dev/null)" 2>/dev/null;'
 
     if tmux.is_available():
+        # Kill any existing session for this project+panel (regardless of agent)
+        # This ensures we get the correct agent when switching
+        subprocess.run(["tmux", "kill-session", "-t", session], check=False, capture_output=True)
         shell_cmd = (
             f"{fnm_setup} cd {safe_cwd} && "
-            f"(tmux has-session -t {session!r} 2>/dev/null && "
-            f"tmux clear-history -t {session!r} 2>/dev/null && "
-            f"exec tmux attach-session -t {session!r} || "
             f"(command -v {agent_cmd} >/dev/null && "
             f"exec tmux new-session -s {session!r} 'while command -v {agent_cmd} >/dev/null 2>&1; do {agent_cmd}; sleep 1; done' || "
-            f"exec bash -i))"
+            f"exec bash -i)"
         )
     else:
         shell_cmd = (
@@ -1186,6 +1199,13 @@ def handle_agent_switch(data):
             new_agent = switcher.switch_agent(project_name)
         emit_event("INFO", f"{project_name} → {new_agent}")
         socketio.emit("agent_switched", {"project": project_name, "agent": new_agent, "panel": panel})
+        # Save panel state
+        settings = _load_cc_settings()
+        settings.setdefault("panels", {})[str(panel)] = {
+            "project": project_name,
+            "agent": new_agent
+        }
+        _save_settings(settings)
     except ValueError as e:
         emit_event("ERROR", str(e))
 
@@ -1194,12 +1214,12 @@ def handle_agent_switch(data):
 if __name__ == "__main__":
     logger.info(f"Starting CommandCenter v{__version__}")
 
-    # Register signal handlers for graceful shutdown
-    def signal_handler(signum, frame):
+    import signal
+    # Handle SIGNALS for systemd - allow graceful shutdown
+    def handle_signal(signum, frame):
         global shutdown_requested
         logger.info(f"Shutdown signal received ({signum})")
         shutdown_requested = True
-        # Close all PTY bridges
         for sid_map in list(ptys.values()):
             for slot in sid_map.values():
                 for key in ("bridge", "bash_bridge"):
@@ -1210,15 +1230,21 @@ if __name__ == "__main__":
                         except Exception:
                             pass
         logger.info("All PTY bridges closed, exiting")
-        sys.exit(0)
-
-    import signal
-    # Ignore SIGTERM/SIGINT - server runs until explicitly killed with SIGKILL
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+        pid_file = Path("/tmp/commandcenter.pid")
+        pid_file.unlink(missing_ok=True)
+        os._exit(0)
+    
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGHUP, handle_signal)
 
     port = int(os.environ.get("CC_PORT", 5050))
     logger.info(f"⚡ commandcenter on http://0.0.0.0:{port} (tmux={'on' if tmux.is_available() else 'off'})")
+
+    # Write PID file so launchers can find us
+    pid_file = Path("/tmp/commandcenter.pid")
+    pid_file.write_text(str(os.getpid()))
+    logger.info(f"Writing PID {os.getpid()} to {pid_file}")
     logger.info("STARTING background threads...")
     socketio.start_background_task(metrics_thread)
     logger.info("  -> metrics_thread started")
@@ -1244,4 +1270,10 @@ if __name__ == "__main__":
         logger.error(f"SERVER CRASHED: {exc}")
         import traceback
         logger.error(traceback.format_exc())
-        sys.exit(1)
+        # Clean up PID file before exit
+        try:
+            pid_file = Path("/tmp/commandcenter.pid")
+            pid_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+        os._exit(1)  # sys.exit doesn't work when signals are ignored - force exit

@@ -1,4 +1,4 @@
-import subprocess
+import gevent.subprocess as subprocess
 
 
 class GitService:
@@ -15,10 +15,8 @@ class GitService:
 
         dirty = run(["git", "status", "--porcelain"]) != ""
 
-        # Check if upstream exists first
         upstream = run(["git", "rev-parse", "--abbrev-ref", f"{branch}@{{u}}"])
         if not upstream:
-            # No upstream configured
             return {
                 "branch": branch,
                 "dirty": dirty,
