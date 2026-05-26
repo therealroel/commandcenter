@@ -12,78 +12,33 @@ A mission-control dashboard for managing multiple AI coding agents side-by-side.
 - **Live System Metrics** — CPU, RAM, disk, and network monitoring with sparkline graphs
 - **Git Status** — Real-time branch name and dirty state indicators per project
 - **Project Management** — Add/remove projects via file browser, switch projects per panel
+- **Config Switching** — Hover on `S` (subscription) or `B` (bedrock) indicator to see logged-in user
+- **Panel State Persistence** — Server saves panel state; reload page without losing layout
 - **Weather Display** — Current conditions in the header
 - **Event Log** — Track agent activity (tool use, errors, thinking states)
 - **Channel Badges** — See which projects are assigned to which panels (CH1, CH2, CH3)
-
-## Quick Start
-
-```bash
-# Clone the repo
-git clone https://github.com/yourusername/commandcenter.git
-cd commandcenter
-
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run
-python server.py
-
-# Open http://localhost:5050
-```
-
-### Desktop App
-
-Install as a standalone desktop application (creates shortcut, installs icon, auto-starts server):
-
-```bash
-./install-desktop.sh
-commandcenter
-```
-
-**macOS:**
-```bash
-./install-desktop-macos.sh
-# Then open ~/Applications/CommandCenter.app or add to Dock
-```
-
-**Windows:** Use WSL (Windows Subsystem for Linux) — native Windows is not supported due to PTY limitations.
-
-## Service Management
-
-The server runs as a systemd user service for reliability:
-
-```bash
-# Start
-systemctl --user start commandcenter
-
-# Stop
-systemctl --user stop commandcenter
-
-# Restart
-systemctl --user restart commandcenter
-
-# View status
-systemctl --user status commandcenter
-
-# View logs
-journalctl --user -u commandcenter -f
-```
-
-The service is configured with `Restart=always` — if the server crashes, systemd automatically restarts it.
 
 ## Requirements
 
 - **Linux** or **macOS** (Windows requires WSL)
 - Python 3.10+
 - tmux (recommended for session persistence)
-- **xclip** (for clipboard copy in tmux copy mode: `sudo apt install xclip`)
+- **xclip** (for clipboard copy in tmux copy mode)
 - Default browser (Firefox, Chrome, Edge, etc.)
 - At least one AI coding agent installed
+
+### Install Dependencies
+
+```bash
+# Ubuntu/Debian
+sudo apt install tmux xclip
+
+# macOS
+brew install tmux xclip
+
+# Python packages
+pip install -r requirements.txt
+```
 
 ### Supported Agents
 
@@ -93,30 +48,52 @@ The service is configured with `Restart=always` — if the server crashes, syste
 | OpenCode | `opencode` | [opencode](https://github.com/opencode-ai/opencode) |
 | Codex | `codex` | `npm install -g @openai/codex` |
 
+## Quick Start
+
+```bash
+# Clone the repo
+git clone https://github.com/therealroel/commandcenter.git
+cd commandcenter
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Run
+python server.py
+
+# Open http://localhost:5050
+```
+
+## Desktop Installation
+
+Install as a standalone desktop application:
+
+```bash
+# Linux
+./install-desktop.sh
+commandcenter  # Run via launcher
+
+# macOS
+./install-desktop-macos.sh
+# Open ~/Applications/CommandCenter.app or add to Dock
+```
+
+Windows requires WSL (native Windows not supported due to PTY limitations).
+
 ## Configuration
 
-### Projects
+### Projects Setup
 
-Edit `config/projects.json` to configure your projects:
+On first run, copy `config/projects.example.json` to `config/projects.json`:
 
-```json
-{
-  "projects": [
-    {
-      "name": "my-app",
-      "path": "/home/user/projects/my-app",
-      "agent": "claude",
-      "launch_on_start": true
-    },
-    {
-      "name": "backend",
-      "path": "/home/user/projects/backend",
-      "agent": "opencode",
-      "launch_on_start": true
-    }
-  ]
-}
+```bash
+cp config/projects.example.json config/projects.json
 ```
+
+Or use the GUI: Press `+ ADD PROJECT` in the project palette to browse and add folders.
+
+The `projects.json` file is gitignored — your private project settings are never pushed to the repo.
 
 ### Environment Variables
 
@@ -127,62 +104,136 @@ Edit `config/projects.json` to configure your projects:
 ## Usage
 
 ### Panel Layout
+
 Click **1**, **2**, or **3** in the projects strip to change the number of visible terminal panels.
 
 ### Switching Projects
+
 - Click a project chip in the strip to open it in the focused panel
 - Click the project name in a panel header to open the project palette
 - Use **+ ADD PROJECT** to browse and add new project folders
 
 ### Switching Agents
-Click the agent button in any panel header to cycle through: Claude → OpenCode → Codex
+
+Click the agent button in any panel header to cycle through: **Claude → OpenCode → Codex**
+
+### Config Indicator (S/B)
+
+Each panel shows an indicator for the active config:
+- **S** = Subscription mode (Anthropic API)
+- **B** = Bedrock mode (AWS)
+
+**Hover over the indicator** to see the logged-in user email for subscription mode.
+
+### Tmux Copy Mode
+
+When in tmux, press `prefix` (default `Ctrl+b`) then `[` to enter copy mode:
+
+- **Scroll** with arrow keys
+- **Select text** with arrow keys + `Enter` or `v`
+- **Copy** with `Enter` or `y` (sends to xclip)
+- **Quit** with `q` or `Esc`
 
 ### Keyboard Shortcuts
-- `Ctrl+Alt+Tab` or `Ctrl+Alt+→` — Cycle focus between panels
-- `Shift+Scroll` — Scroll terminal history
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+Tab` | Cycle focus between panels |
+| `Shift+Scroll` | Scroll terminal history |
+
+### Closing the App
+
+Closing the browser tab does NOT stop your agents. They continue running in their tmux sessions.
+
+To stop everything:
+
+```bash
+# Find the process
+cat /tmp/commandcenter.pid
+
+# Kill it
+kill $(cat /tmp/commandcenter.pid)
+```
+
+Or use `pkill -f "python server.py"`.
 
 ## Architecture
 
 ```
-server.py           # Flask + Socket.IO server
-templates/
-  index.html        # Single-page app (HTML + CSS + JS)
-services/
-  pty_bridge.py     # PTY ↔ WebSocket bridge
-  system.py         # System metrics via psutil
-  weather.py        # Weather API (wttr.in)
-  git.py            # Git status polling
-agents/
-  switcher.py       # Agent cycling logic
-launcher/
-  tmux.py           # Tmux session management
-config/
-  projects.json     # Your project configuration (gitignored)
+commandcenter/
+├── server.py              # Flask + Socket.IO server (main entry)
+├── agents/
+│   └── switcher.py        # Agent cycling and project config
+├── config/
+│   ├── projects.json      # Your projects (gitignored)
+│   └── projects.example.json  # Template for new users
+├── launcher/
+│   └── tmux.py            # Tmux session management
+├── services/
+│   ├── pty_bridge.py      # PTY ↔ WebSocket bridge
+│   ├── system.py          # System metrics via psutil
+│   ├── weather.py         # Weather API (wttr.in)
+│   └── git.py             # Git status polling
+├── templates/
+│   └── index.html         # Single-page app (HTML + CSS + JS)
+├── install-desktop.sh     # Desktop launcher installer (Linux)
+├── install-desktop-macos.sh  # Desktop launcher installer (macOS)
+└── requirements.txt       # Python dependencies
 ```
 
 ### Tech Stack
+
 - **Backend**: Flask + Flask-SocketIO on gevent
-- **WebSocket**: `gevent-websocket`'s `WebSocketHandler` mounted explicitly on
-  `gevent.pywsgi.WSGIServer` (see `server.py` `__main__`). Flask-SocketIO's
-  auto-detection of the handler is unreliable, which leaves Socket.IO stuck on
-  long-polling — wiring the handler ourselves guarantees the upgrade. Do not
-  switch to `simple-websocket` without also replacing the PTY bridge: it
-  requires `async_mode='threading'`, which is incompatible with the gevent
-  monkey-patched blocking I/O the bridge depends on.
-- **Frontend**: Vanilla JS, xterm.js, Socket.IO client (infinite reconnect;
-  re-emits `term_open` on reconnect so PTYs survive a dropped socket)
+- **WebSocket**: gevent-websocket for real-time PTY communication
+- **Frontend**: Vanilla JS, xterm.js, Socket.IO client
 - **Terminal**: Real PTY via Python pty module, optional tmux wrapper
 
 ## Status Rail
 
-The top rail shows real-time system metrics:
-- **CPU** — Usage percentage with sparkline history
-- **MEM** — RAM usage with sparkline history
-- **DISK** — Disk usage and capacity
-- **NET** — Network RX/TX bandwidth
-- **UPTIME** — System uptime
-- **AGENTS** — Count of active projects
-- **EVENTS** — Event log count
+The header shows real-time system metrics:
+
+| Metric | Description |
+|--------|-------------|
+| **CPU** | Usage percentage with sparkline history |
+| **MEM** | RAM usage with sparkline history |
+| **DISK** | Disk usage and capacity |
+| **NET** | Network RX/TX bandwidth |
+| **UPTIME** | System uptime |
+| **AGENTS** | Count of active projects |
+| **EVENTS** | Event log count |
+
+## Security Warning
+
+**No authentication is built-in.** This app is designed for local use on a trusted network.
+
+If you expose it publicly, anyone can:
+- Execute commands in terminals
+- Access projects and their data
+- Use AI agents to perform actions on your behalf
+
+Use behind a VPN or add your own authentication layer.
+
+## Troubleshooting
+
+### Agents not starting
+- Check that the agent command is in your PATH
+- Run `claude --version` (or `opencode --version`, `codex --version`) to verify
+
+### Tmux sessions not persisting
+- Verify tmux is installed: `tmux -V`
+- Check tmux is running: `tmux list-sessions`
+
+### Copy mode not working
+- Install xclip: `sudo apt install xclip` (or `brew install xclip` on macOS)
+- Verify: `xclip --version`
+
+### Panel state not persisting after refresh
+- Server is source of truth — panel state is saved to `~/.claude/commandcenter_settings.json`
+- If server restarts, state is reloaded from tmux sessions
+
+### "subscription mode" shown instead of email
+- Hover over the `S` indicator — it fetches auth status on hover
+- If still shows "subscription mode", you're likely not logged in: `claude auth status`
 
 ## License
 
