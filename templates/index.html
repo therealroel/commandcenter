@@ -2469,8 +2469,9 @@ body::after {
   });
 
   // On-hover auth check to fill in user email on subscription icons
-  document.querySelectorAll('.config-indicator.subscription').forEach(ind => {
+  document.querySelectorAll('.config-indicator').forEach(ind => {
     ind.addEventListener('mouseenter', async () => {
+      if (!ind.classList.contains('subscription')) return;
       const tooltip = ind.querySelector('.config-tooltip');
       if (tooltip && tooltip.textContent && tooltip.textContent !== 'subscription mode') return;
       try {
