@@ -2214,8 +2214,26 @@ body::after {
         panelCount,
         panelProject,
         agents: panels.map(p => p.agentIdx),
+        panelState: panels.map((p, i) => ({
+          panel: i,
+          project: panelProject[i] || null,
+          agent: AGENTS[p.agentIdx].name
+        })),
       };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+      // Also save to server for persistence
+      const panelStateObj = {};
+      data.panelState.forEach(ps => {
+        // Only save panels that are visible (panel < panelCount)
+        if (ps.panel < panelCount) {
+          panelStateObj[String(ps.panel)] = { project: ps.project, agent: ps.agent };
+        }
+      });
+      fetch('/api/panel-state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ panels: panelStateObj })
+      }).catch(e => console.warn('saveSettings to server failed:', e));
     } catch (e) {
       console.warn('saveSettings failed:', e);
     }
@@ -2260,6 +2278,19 @@ body::after {
       saved.agents.forEach((idx, i) => {
         if (panels[i] && idx < AGENTS.length) {
           panels[i].agentIdx = idx;
+        }
+      });
+    }
+    // Restore from panelState if available (more detailed than panelProject/agents)
+    if (saved.panelState) {
+      saved.panelState.forEach(ps => {
+        if (ps.panel >= 0 && ps.panel < 3) {
+          const p = panels[ps.panel];
+          panelProject[ps.panel] = ps.project;
+          const agentIdx = AGENTS.findIndex(a => a.name === ps.agent);
+          if (agentIdx >= 0) {
+            p.agentIdx = agentIdx;
+          }
         }
       });
     }
@@ -2435,6 +2466,21 @@ body::after {
       tooltip.textContent = user === 'subscription' ? 'subscription mode' : user + ' · subscription';
       ind.className = 'config-indicator subscription';
     }
+  });
+
+  // On-hover auth check to fill in user email on subscription icons
+  document.querySelectorAll('.config-indicator.subscription').forEach(ind => {
+    ind.addEventListener('mouseenter', async () => {
+      const tooltip = ind.querySelector('.config-tooltip');
+      if (tooltip && tooltip.textContent && tooltip.textContent !== 'subscription mode') return;
+      try {
+        const r = await fetch('/api/auth/check');
+        const j = await r.json();
+        if (j.ok && j.user) {
+          tooltip.textContent = j.user + ' · subscription';
+        }
+      } catch (_) {}
+    });
   });
 
   /* ===== BOTTOM BASH TERMINAL (per-panel, rooted at project path) ===== */
@@ -2824,15 +2870,38 @@ body::after {
       document.getElementById('tmux-icon').style.color = tmuxOn ? 'var(--green)' : 'var(--red)';
       document.getElementById('tmux-label').textContent = 'TMUX';
       document.getElementById('tmux-label').style.color = tmuxOn ? 'var(--green)' : 'var(--red)';
-      // Restore saved settings or use defaults
-      const saved = loadSettings();
-      restoreSettings(saved);
-      if (!saved) {
-        // Default: first two projects
-        panelProject[0] = PROJECT_LIST[0] ? PROJECT_LIST[0].name : null;
-        panelProject[1] = PROJECT_LIST[1] ? PROJECT_LIST[1].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
-        panelProject[2] = PROJECT_LIST[2] ? PROJECT_LIST[2].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
+      
+      // Fetch server panel state FIRST - this is source of truth
+      try {
+        const serverState = await fetch('/api/panel-state').then(r => r.json());
+        if (serverState && Object.keys(serverState).length > 0) {
+          // Server has state - use it
+          for (const [panelStr, data] of Object.entries(serverState)) {
+            const panel = parseInt(panelStr);
+            if (panel >= 0 && panel < 3 && data.project) {
+              panelProject[panel] = data.project;
+              const agentIdx = AGENTS.findIndex(a => a.name === data.agent);
+              if (agentIdx >= 0) {
+                panels[panel].agentIdx = agentIdx;
+              }
+            }
+          }
+        } else {
+          // No server state - use localStorage defaults
+          const saved = loadSettings();
+          if (saved) restoreSettings(saved);
+          if (!saved) {
+            panelProject[0] = PROJECT_LIST[0] ? PROJECT_LIST[0].name : null;
+            panelProject[1] = PROJECT_LIST[1] ? PROJECT_LIST[1].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
+            panelProject[2] = PROJECT_LIST[2] ? PROJECT_LIST[2].name : (PROJECT_LIST[0] ? PROJECT_LIST[0].name : null);
+          }
+        }
+      } catch (e) {
+        // Fallback to localStorage if server fetch fails
+        const saved = loadSettings();
+        if (saved) restoreSettings(saved);
       }
+      
       // Apply to UI
       for (let i = 0; i < 3; i++) {
         if (panelProject[i]) applyProjectToPanel(i);
@@ -2852,15 +2921,16 @@ body::after {
     const projEl = document.querySelector(`#panel-${panelId} .panel-project`);
     if (projEl) projEl.textContent = name || 'no project';
     if (proj) {
-      const idx = AGENTS.findIndex(a => a.name === (proj.agent || 'claude'));
-      if (idx >= 0) {
-        panels[panelId].agentIdx = idx;
-        const btn = document.getElementById(`agent-btn-${panelId}`);
-        btn.querySelector('.a-glyph').textContent = AGENTS[idx].emoji;
-        btn.className = `agent-btn ${AGENTS[idx].cls}`;
-        btn.dataset.panel = panelId;
-        document.getElementById(`agent-name-${panelId}`).textContent = AGENTS[idx].name;
-      }
+      // Only use project's default agent if panel doesn't have a saved agent
+      // The saved agent in panelState takes precedence over project defaults
+      const savedAgent = panels[panelId].agentIdx;
+      const currentAgentName = AGENTS[savedAgent].name;
+      // We'll update the button but keep the saved agent
+      const btn = document.getElementById(`agent-btn-${panelId}`);
+      btn.querySelector('.a-glyph').textContent = AGENTS[savedAgent].emoji;
+      btn.className = `agent-btn ${AGENTS[savedAgent].cls}`;
+      btn.dataset.panel = panelId;
+      document.getElementById(`agent-name-${panelId}`).textContent = currentAgentName;
     }
     renderProjectsStrip();
   }

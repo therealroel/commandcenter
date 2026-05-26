@@ -53,6 +53,29 @@ commandcenter
 
 **Windows:** Use WSL (Windows Subsystem for Linux) — native Windows is not supported due to PTY limitations.
 
+## Service Management
+
+The server runs as a systemd user service for reliability:
+
+```bash
+# Start
+systemctl --user start commandcenter
+
+# Stop
+systemctl --user stop commandcenter
+
+# Restart
+systemctl --user restart commandcenter
+
+# View status
+systemctl --user status commandcenter
+
+# View logs
+journalctl --user -u commandcenter -f
+```
+
+The service is configured with `Restart=always` — if the server crashes, systemd automatically restarts it.
+
 ## Requirements
 
 - **Linux** or **macOS** (Windows requires WSL)
