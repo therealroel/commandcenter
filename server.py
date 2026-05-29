@@ -106,7 +106,7 @@ socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*", logger=F
 switcher = AgentSwitcher()
 tmux = TmuxManager()
 system_service = SystemService()
-weather_service = WeatherService()
+weather_service = WeatherService(os.environ.get("CC_WEATHER_CITY", "Copenhagen"))
 git_service = GitService()
 
 # Per-panel state -----------------------------------------------------------

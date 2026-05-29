@@ -16,4 +16,3 @@ config/projects.json.backup
 .claude/commandcenter_settings.json
 .claude/settings.bedrock-backup.json
 .claude/settings.anthropic-backup.json
-config/projects.json
