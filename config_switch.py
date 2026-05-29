@@ -3,6 +3,7 @@
 import sys
 import json
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 BASE = Path.home() / ".claude"
@@ -57,5 +58,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    from datetime import datetime
     main()

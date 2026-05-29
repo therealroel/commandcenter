@@ -101,6 +101,7 @@ The `projects.json` file is gitignored — your private project settings are nev
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CC_PORT` | `5050` | Server port |
+| `CC_WEATHER_CITY` | `Copenhagen` | City shown in the header weather widget (via wttr.in) |
 
 ### Settings File
 
@@ -138,7 +139,7 @@ Click **1**, **2**, or **3** in the projects strip to change the number of visib
 
 ### Switching Agents
 
-Click the agent button in any panel header to cycle through: **Claude → OpenCode → Codex**
+Click the agent button in any panel header to cycle through: **OpenCode → Claude → Codex**
 
 ### Config Indicator (S/B)
 
@@ -184,7 +185,9 @@ Or use `pkill -f "python server.py"`.
 
 ```
 commandcenter/
-├── server.py              # Flask + Socket.IO server (main entry)
+├── server.py              # Flask + Socket.IO server (main entry, tmux + janitor)
+├── version.py             # __version__ (semantic versioning)
+├── config_switch.py       # Standalone CLI to swap Claude bedrock/subscription config
 ├── agents/
 │   └── switcher.py        # Agent cycling and project config
 ├── config/
@@ -193,12 +196,15 @@ commandcenter/
 ├── launcher/
 │   └── tmux.py            # Thin tmux probe (availability + cc-* session list)
 ├── services/
-│   ├── pty_bridge.py      # PTY ↔ WebSocket bridge
+│   ├── pty_bridge.py      # PTY ↔ WebSocket bridge (gevent reader)
 │   ├── system.py          # System metrics via psutil
 │   ├── weather.py         # Weather API (wttr.in)
 │   └── git.py             # Git status polling
 ├── templates/
 │   └── index.html         # Single-page app (HTML + CSS + JS)
+├── test_integration.py    # End-to-end suite (boots a live server)
+├── test_fixes.py          # Regression checks for past fixes
+├── test_panel_api.py      # Panel-state API tests
 ├── install-desktop.sh     # Desktop launcher installer (Linux)
 ├── install-desktop-macos.sh  # Desktop launcher installer (macOS)
 └── requirements.txt       # Python dependencies
@@ -222,7 +228,7 @@ The header shows real-time system metrics:
 | **DISK** | Disk usage and capacity |
 | **NET** | Network RX/TX bandwidth |
 | **UPTIME** | System uptime |
-| **AGENTS** | Count of active projects |
+| **AGENTS** | Active panels in use, out of 3 (e.g. `2 / 3 ACTIVE`) |
 | **EVENTS** | Event log count |
 
 ## Security Warning
