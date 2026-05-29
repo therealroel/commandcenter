@@ -952,14 +952,17 @@ def handle_term_open(data):
     fnm_setup = 'export PATH="$HOME/.local/share/fnm:$PATH"; eval "$(fnm env 2>/dev/null)" 2>/dev/null;'
 
     if tmux.is_available():
-        # Kill any existing session for this project+panel (regardless of agent)
-        # This ensures we get the correct agent when switching
-        subprocess.run(["tmux", "kill-session", "-t", session], check=False, capture_output=True)
+        # Resume the session if it already exists (page refresh / reconnect keeps
+        # the agent's conversation and scrollback intact); otherwise start it
+        # fresh. Switching agents targets a different session name, so that still
+        # spawns a new session while the previous agent keeps running in the
+        # background. The idle janitor reaps never-used sessions.
         shell_cmd = (
             f"{fnm_setup} cd {safe_cwd} && "
+            f"(tmux has-session -t {session!r} 2>/dev/null && exec tmux attach-session -t {session!r} || "
             f"(command -v {agent_cmd} >/dev/null && "
             f"exec tmux new-session -s {session!r} -n {agent_cmd!r} 'while command -v {agent_cmd} >/dev/null 2>&1; do {agent_cmd}; sleep 1; done' || "
-            f"exec bash -i)"
+            f"exec bash -i))"
         )
     else:
         shell_cmd = (

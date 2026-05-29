@@ -2846,8 +2846,17 @@ body::after {
         openTerm(i);
       }
     }
-    // Resize existing terminals
-    Object.values(terms).forEach(t => { try { t.fit.fit(); } catch(e) {} });
+    // Resize + repaint existing terminals. A panel that was hidden and is now
+    // visible again needs a refresh() — the DOM renderer won't repaint a
+    // re-shown grid on its own. Defer one tick so the layout has settled.
+    setTimeout(() => {
+      Object.keys(terms).forEach(pid => {
+        const panel = document.getElementById(`panel-${pid}`);
+        if (panel && panel.getAttribute('data-hidden') === '1') return;
+        const t = terms[pid];
+        try { t.fit.fit(); t.term.refresh(0, t.term.rows - 1); } catch (e) {}
+      });
+    }, 0);
     // Re-render strip to update channel badges and open project count
     renderProjectsStrip();
     // Persist settings
@@ -3466,8 +3475,30 @@ body::after {
      don't fight tmux/claude keybinds. */
   let focusedPanel = 0;
   document.querySelectorAll('.chat-panel').forEach(p => {
+    const panelId = parseInt(p.id.split('-')[1]);
     p.addEventListener('focusin', () => {
-      focusedPanel = parseInt(p.id.split('-')[1]);
+      focusedPanel = panelId;
+    });
+
+    // Clicking back into a panel must (1) move keyboard focus to its xterm and
+    // (2) force a repaint. Without this you click the panel container
+    // (tabindex=0) instead of the terminal — so you can't type — and the DOM
+    // renderer leaves the grid stale until an interaction (e.g. selecting text)
+    // forces a refresh. Re-focusing + refreshing on mousedown fixes both.
+    // Header controls are excluded so the agent dropdown / config chip still work.
+    p.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button, input, a, .agent-dropdown, .config-indicator, .bash-splitter')) return;
+      focusedPanel = panelId;
+      const t = e.target.closest('.bash-host') ? bashTerms[panelId] : terms[panelId];
+      if (!t || !t.term) return;
+      // Defer so xterm's own mousedown handling runs first, then assert focus
+      // and repaint the full viewport.
+      setTimeout(() => {
+        try {
+          t.term.focus();
+          t.term.refresh(0, t.term.rows - 1);
+        } catch (_) {}
+      }, 0);
     });
   });
 
