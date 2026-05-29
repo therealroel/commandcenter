@@ -240,19 +240,18 @@ print("[3] Testing WebSocket (Socket.IO)...")
 try:
     import socketio
 
-    @socketio.on('connect')
-    def test_connect():
+    # Handlers register on the Client instance, not the module.
+    client = socketio.Client()
+
+    @client.event
+    def connect():
         print("  ✓ Socket.IO connected successfully")
 
-    @socketio.on('metrics_update')
-    def test_metrics(data):
+    @client.on('metrics_update')
+    def on_metrics(data):
         print("  ✓ Received metrics_update event")
-        io.emit('disconnect')
 
-    client = socketio.Client()
     client.connect(HOST, transports=['polling'])
-
-    # Test disconnect
     print("  ✓ Socket.IO connection test")
     client.disconnect()
     results.add_pass("Socket.IO connection")
@@ -281,7 +280,13 @@ def test_pty_bridge():
     # Create a simple PTY that runs 'echo test'
     bridge = PtyBridge(['echo', 'test'], on_data, rows=24, cols=80)
 
-    time.sleep(1)
+    # PtyBridge reads on a gevent greenlet (gevent.socket.wait_read). gevent
+    # isn't monkey-patched here, so a real time.sleep would block the hub and
+    # the reader would never run — yield with gevent.sleep instead.
+    import gevent
+    deadline = time.time() + 5
+    while time.time() < deadline and not data_received:
+        gevent.sleep(0.05)
     bridge.close()
 
     assert len(data_received) > 0, "Should receive data from PTY"
@@ -466,12 +471,14 @@ print()
 print("[6] Testing Frontend HTML/JS...")
 
 def test_html_no_cache():
-    """Test HTML has no-cache headers logic"""
-    with open('templates/index.html', 'r') as f:
+    """Test the index route sets no-cache headers on the response."""
+    # Headers are set on the Flask response (server.py), not baked into the
+    # template, so assert against the response-building code.
+    with open('server.py', 'r') as f:
         content = f.read()
 
-    # Should have cache-busting code
-    assert 'Cache-Control' in content or 'no-cache' in content, "Should have cache control"
+    assert 'Cache-Control' in content and 'no-store' in content, \
+        "index route should set no-cache/no-store headers on the response"
     results.add_pass("HTML has cache control")
     return True
 
