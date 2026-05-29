@@ -158,6 +158,25 @@ When in tmux, press `prefix` (default `Ctrl+b`) then `[` to enter copy mode:
 - **Copy** with `Enter` or `y` (sends to xclip)
 - **Quit** with `q` or `Esc`
 
+#### Recommended `~/.tmux.conf`
+
+For mouse scrolling + drag-to-copy that **doesn't trap your keyboard**, install
+the bundled config ([`config/tmux.conf`](config/tmux.conf)):
+
+```bash
+cat config/tmux.conf >> ~/.tmux.conf   # append to your existing config, OR
+cp  config/tmux.conf  ~/.tmux.conf     # use it as your whole config
+tmux source ~/.tmux.conf               # reload into the running server
+```
+
+It enables `mouse on`, drag-to-clipboard via xclip, and wheel bindings that pass
+scrolling through to full-screen apps (Claude's TUI) instead of hijacking it.
+
+> ⚠️ A bare `copy-mode` wheel binding drops **every** non-mouse app into copy
+> mode on scroll, which swallows your keystrokes — you'd see a `[0/NNN]`
+> indicator and be unable to type until you press `q`. The bundled config avoids
+> this.
+
 ### Keyboard Shortcuts
 
 | Shortcut | Action |
@@ -192,7 +211,8 @@ commandcenter/
 │   └── switcher.py        # Agent cycling and project config
 ├── config/
 │   ├── projects.json      # Your projects (gitignored)
-│   └── projects.example.json  # Template for new users
+│   ├── projects.example.json  # Template for new users
+│   └── tmux.conf          # Recommended tmux config (scroll/copy, no copy-mode trap)
 ├── launcher/
 │   └── tmux.py            # Thin tmux probe (availability + cc-* session list)
 ├── services/
