@@ -563,14 +563,9 @@ def audit_log(action, details=None, level="info"):
 
 ANSI_RE = re.compile(rb"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*[\x07\x1b]")
 
-# Session name hashing for privacy - project names don't appear in tmux/ps
-import hashlib
-
-def _generate_session_id(project_name, panel, agent):
-    """Generate a hashed session ID to hide project names in tmux/ps."""
-    raw = f"{project_name}-{panel}-{agent}"
-    return hashlib.sha1(raw.encode()).hexdigest()[:16]
-
+# Session names are built as cc-<project>-<panel>-<agent>. Project names are
+# sanitized (not hashed), so they DO appear in `tmux ls` / `ps` — this app is
+# meant for trusted local use only (see the Security section in the README).
 def _sanitize_session_name(name):
     """Sanitize string for use in tmux session names - only allow safe chars."""
     if not name:

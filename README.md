@@ -14,6 +14,7 @@ A mission-control dashboard for managing multiple AI coding agents side-by-side.
 - **Project Management** — Add/remove projects via file browser, switch projects per panel
 - **Config Switching** — Hover on `S` (subscription) or `B` (bedrock) indicator to see logged-in user
 - **Panel State Persistence** — Server saves panel state; reload page without losing layout
+- **Idle Session Auto-Cleanup** — Never-used agent sessions are reaped after 10 min so stale tmux sessions don't pile up (toggleable)
 - **Weather Display** — Current conditions in the header
 - **Event Log** — Track agent activity (tool use, errors, thinking states)
 - **Channel Badges** — See which projects are assigned to which panels (CH1, CH2, CH3)
@@ -101,6 +102,28 @@ The `projects.json` file is gitignored — your private project settings are nev
 |----------|---------|-------------|
 | `CC_PORT` | `5050` | Server port |
 
+### Settings File
+
+Runtime settings (panel layout, auto-cleanup toggle) are stored in
+`~/.claude/commandcenter_settings.json`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `auto_close_idle` | `true` | Auto-reap never-used agent sessions (see below) |
+| `panels` | `{}` | Saved per-panel project/agent state |
+
+### Idle Session Auto-Cleanup
+
+A background janitor runs every 60s and kills `cc-*` tmux sessions that are:
+1. **Not** bound to any open panel on a connected client, **and**
+2. Older than **10 minutes**, **and**
+3. Still sitting on a sign-in / welcome / "type a message" prompt (i.e. never
+   actually used).
+
+Sessions you're actively using are never touched. To disable, set
+`auto_close_idle` to `false` in the settings file (or toggle it via the
+`/api/settings/auto-close-idle` endpoint).
+
 ## Usage
 
 ### Panel Layout
@@ -168,7 +191,7 @@ commandcenter/
 │   ├── projects.json      # Your projects (gitignored)
 │   └── projects.example.json  # Template for new users
 ├── launcher/
-│   └── tmux.py            # Tmux session management
+│   └── tmux.py            # Thin tmux probe (availability + cc-* session list)
 ├── services/
 │   ├── pty_bridge.py      # PTY ↔ WebSocket bridge
 │   ├── system.py          # System metrics via psutil
@@ -222,6 +245,12 @@ Use behind a VPN or add your own authentication layer.
 ### Tmux sessions not persisting
 - Verify tmux is installed: `tmux -V`
 - Check tmux is running: `tmux list-sessions`
+
+### An agent session disappeared on its own
+- The idle janitor reaps `cc-*` sessions that are >10 min old and never used
+  (still on a sign-in/welcome prompt). Sessions bound to an open panel are safe.
+- To keep all sessions, set `auto_close_idle` to `false` in
+  `~/.claude/commandcenter_settings.json`. See [Idle Session Auto-Cleanup](#idle-session-auto-cleanup).
 
 ### Copy mode not working
 - Install xclip: `sudo apt install xclip` (or `brew install xclip` on macOS)
