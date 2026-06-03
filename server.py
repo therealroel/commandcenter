@@ -26,6 +26,7 @@ from launcher.tmux import TmuxManager
 from services.system import SystemService
 from services.weather import WeatherService
 from services.git import GitService
+from services.docker import DockerService
 
 # ============================================================================
 # LOGGING SETUP - Structured logging instead of print() statements
@@ -108,6 +109,7 @@ tmux = TmuxManager()
 system_service = SystemService()
 weather_service = WeatherService(os.environ.get("CC_WEATHER_CITY", "Copenhagen"))
 git_service = GitService()
+docker_service = DockerService()
 
 # Per-panel state -----------------------------------------------------------
 # sid -> { panel_id: {bridge, project, agent} }
@@ -409,6 +411,366 @@ def api_set_auto_close_idle():
     return jsonify({"ok": True, "enabled": enabled})
 
 
+# ============================================================================
+# IDE LAUNCHER — "Open IDE" button per panel
+# ============================================================================
+# Ordered by detection priority: when several IDEs are running/installed and the
+# user hasn't picked one, the first match in this list wins as the default.
+# `cmd` is the PATH launcher that accepts a folder path; `procs` are process
+# names used to detect whether that IDE is currently running.
+IDE_DEFS = [
+    {"key": "kiro",          "label": "Kiro",             "cmd": "kiro",          "procs": ["kiro"]},
+    {"key": "cursor",        "label": "Cursor",           "cmd": "cursor",        "procs": ["cursor"]},
+    {"key": "windsurf",      "label": "Windsurf",         "cmd": "windsurf",      "procs": ["windsurf"]},
+    {"key": "code-insiders", "label": "VS Code Insiders", "cmd": "code-insiders", "procs": ["code-insiders"]},
+    {"key": "code",          "label": "VS Code",          "cmd": "code",          "procs": ["code"]},
+    {"key": "codium",        "label": "VSCodium",         "cmd": "codium",        "procs": ["codium", "vscodium"]},
+    {"key": "zed",           "label": "Zed",              "cmd": "zed",           "procs": ["zed", "zed-editor"]},
+    {"key": "subl",          "label": "Sublime Text",     "cmd": "subl",          "procs": ["sublime_text"]},
+    {"key": "fleet",         "label": "JetBrains Fleet",  "cmd": "fleet",         "procs": ["fleet"]},
+    {"key": "idea",          "label": "IntelliJ IDEA",    "cmd": "idea",          "procs": ["idea"]},
+    {"key": "pycharm",       "label": "PyCharm",          "cmd": "pycharm",       "procs": ["pycharm"]},
+    {"key": "webstorm",      "label": "WebStorm",         "cmd": "webstorm",      "procs": ["webstorm"]},
+    {"key": "phpstorm",      "label": "PhpStorm",         "cmd": "phpstorm",      "procs": ["phpstorm"]},
+    {"key": "rubymine",      "label": "RubyMine",         "cmd": "rubymine",      "procs": ["rubymine"]},
+    {"key": "goland",        "label": "GoLand",           "cmd": "goland",        "procs": ["goland"]},
+    {"key": "rider",         "label": "Rider",            "cmd": "rider",         "procs": ["rider"]},
+    {"key": "clion",         "label": "CLion",            "cmd": "clion",         "procs": ["clion"]},
+    {"key": "datagrip",      "label": "DataGrip",         "cmd": "datagrip",      "procs": ["datagrip"]},
+    {"key": "studio",        "label": "Android Studio",   "cmd": "studio",        "procs": ["studio", "android-studio"]},
+    {"key": "lapce",         "label": "Lapce",            "cmd": "lapce",         "procs": ["lapce"]},
+    {"key": "neovide",       "label": "Neovide",          "cmd": "neovide",       "procs": ["neovide"]},
+    {"key": "gvim",          "label": "GVim",             "cmd": "gvim",          "procs": ["gvim"]},
+    {"key": "emacs",         "label": "Emacs",            "cmd": "emacs",         "procs": ["emacs"]},
+    {"key": "gnome-builder", "label": "GNOME Builder",    "cmd": "gnome-builder", "procs": ["gnome-builder"]},
+    {"key": "kate",          "label": "Kate",             "cmd": "kate",          "procs": ["kate"]},
+    {"key": "geany",         "label": "Geany",            "cmd": "geany",         "procs": ["geany"]},
+    {"key": "pulsar",        "label": "Pulsar",           "cmd": "pulsar",        "procs": ["pulsar"]},
+    {"key": "eclipse",       "label": "Eclipse",          "cmd": "eclipse",       "procs": ["eclipse"]},
+    {"key": "netbeans",      "label": "Apache NetBeans",  "cmd": "netbeans",      "procs": ["netbeans"]},
+]
+_IDE_BY_KEY = {d["key"]: d for d in IDE_DEFS}
+
+# Installed launchers don't change at runtime → resolve once and cache.
+_installed_ides_cache = None
+
+
+def _installed_ides():
+    global _installed_ides_cache
+    if _installed_ides_cache is None:
+        _installed_ides_cache = {d["key"] for d in IDE_DEFS if shutil.which(d["cmd"])}
+    return _installed_ides_cache
+
+
+def _running_ides():
+    """Set of IDE keys whose process is currently running.
+
+    Matches on the process basename (exact) to avoid false positives from
+    substrings appearing in unrelated command lines.
+    """
+    # Build reverse lookup: proc name -> ide key
+    proc_to_key = {}
+    for d in IDE_DEFS:
+        for pname in d["procs"]:
+            proc_to_key[pname] = d["key"]
+
+    found = set()
+    try:
+        for proc in psutil.process_iter(["name", "exe"]):
+            try:
+                names = set()
+                nm = (proc.info.get("name") or "").lower()
+                if nm:
+                    names.add(nm)
+                exe = proc.info.get("exe") or ""
+                if exe:
+                    names.add(os.path.basename(exe).lower())
+            except Exception:
+                continue
+            for nm in names:
+                key = proc_to_key.get(nm)
+                if key:
+                    found.add(key)
+    except Exception as e:
+        logger.warning(f"_running_ides scan failed: {e}")
+    return found
+
+
+def _detect_default_ide():
+    """Best out-of-the-box guess: the running IDE highest in priority order,
+    falling back to the first installed one. Returns an IDE key or None."""
+    installed = _installed_ides()
+    if not installed:
+        return None
+    running = _running_ides()
+    for d in IDE_DEFS:  # priority order
+        if d["key"] in installed and d["key"] in running:
+            return d["key"]
+    for d in IDE_DEFS:
+        if d["key"] in installed:
+            return d["key"]
+    return None
+
+
+def _resolve_ide():
+    """Resolve which IDE to actually launch, honouring the saved setting.
+
+    Returns (spec, source) where:
+      - spec is None when nothing usable is found, or a dict
+        {"key", "label", "cmd"} describing what to launch
+      - source is 'setting', 'custom', 'auto', or 'none'
+    """
+    settings = _load_cc_settings()
+    chosen = settings.get("ide", "auto")
+    installed = _installed_ides()
+
+    if chosen == "custom":
+        custom = (settings.get("ide_custom") or "").strip()
+        if custom:
+            cmd = shutil.which(custom) or (custom if os.path.isabs(custom) and os.access(custom, os.X_OK) else None)
+            if cmd:
+                return {"key": "custom", "label": os.path.basename(custom), "cmd": cmd}, "custom"
+            logger.warning(f"custom IDE command not found: {custom}")
+        return None, "none"
+
+    if chosen and chosen != "auto":
+        if chosen in installed:
+            d = _IDE_BY_KEY[chosen]
+            return {"key": d["key"], "label": d["label"], "cmd": d["cmd"]}, "setting"
+        # Saved IDE no longer installed → fall through to auto-detect.
+        logger.warning(f"configured IDE '{chosen}' not installed; auto-detecting")
+
+    detected = _detect_default_ide()
+    if detected:
+        d = _IDE_BY_KEY[detected]
+        return {"key": d["key"], "label": d["label"], "cmd": d["cmd"]}, "auto"
+    return None, "none"
+
+
+@app.route("/api/ide/list")
+@rate_limit()
+def api_ide_list():
+    """List installed IDEs + the auto-detected default + the saved choice."""
+    installed = _installed_ides()
+    running = _running_ides()
+    detected = _detect_default_ide()
+    settings = _load_cc_settings()
+    ides = [
+        {
+            "key": d["key"],
+            "label": d["label"],
+            "running": d["key"] in running,
+        }
+        for d in IDE_DEFS
+        if d["key"] in installed
+    ]
+    return jsonify({
+        "ides": ides,
+        "selected": settings.get("ide", "auto"),
+        "custom_cmd": settings.get("ide_custom", ""),
+        "detected": detected,
+        "detected_label": _IDE_BY_KEY[detected]["label"] if detected else None,
+    })
+
+
+@app.route("/api/settings/ide", methods=["POST"])
+@rate_limit()
+def api_set_ide():
+    """Persist the user's IDE choice.
+
+    'auto'   → detect the running IDE
+    'custom' → use the provided `cmd` (any editor launcher on PATH or abs path)
+    <key>    → a specific known IDE
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    choice = (data.get("ide") or "auto").strip()
+    settings = _load_cc_settings()
+
+    if choice == "custom":
+        custom = (data.get("cmd") or "").strip()
+        if not custom:
+            return jsonify({"error": "custom command is required"}), 400
+        # Basic sanity: a single token (we launch as argv [cmd, path], no shell).
+        if len(custom.split()) > 1:
+            return jsonify({"error": "enter just the launcher command (no arguments)"}), 400
+        resolved = shutil.which(custom) or (custom if os.path.isabs(custom) and os.access(custom, os.X_OK) else None)
+        settings["ide"] = "custom"
+        settings["ide_custom"] = custom
+        _save_settings(settings)
+        logger.info(f"IDE preference set to custom: {custom}")
+        return jsonify({"ok": True, "ide": "custom", "cmd": custom, "found": bool(resolved)})
+
+    if choice != "auto" and choice not in _IDE_BY_KEY:
+        return jsonify({"error": f"unknown ide: {choice}"}), 400
+    settings["ide"] = choice
+    _save_settings(settings)
+    logger.info(f"IDE preference set to {choice}")
+    return jsonify({"ok": True, "ide": choice})
+
+
+@app.route("/api/open-ide", methods=["POST"])
+@rate_limit()
+def api_open_ide():
+    """Open a project's folder in the resolved IDE."""
+    data = request.get_json(force=True, silent=True) or {}
+    project_name = (data.get("project") or "").strip() or None
+    proj = _resolve_project(project_name) if project_name else None
+    if not proj:
+        return jsonify({"error": "unknown project"}), 400
+
+    path = proj.get("path") or ""
+    path = os.path.realpath(os.path.expanduser(path))
+    if not os.path.isdir(path):
+        return jsonify({"error": f"project path not found: {path}"}), 400
+
+    spec, source = _resolve_ide()
+    if not spec:
+        return jsonify({"error": "no usable IDE found — pick one in Settings"}), 404
+
+    cmd = shutil.which(spec["cmd"]) or (spec["cmd"] if os.path.isabs(spec["cmd"]) else None)
+    if not cmd:
+        return jsonify({"error": f"{spec['label']} launcher not found"}), 404
+
+    try:
+        # Fire-and-forget GUI launch: detach into its own session so it survives
+        # a server restart and never blocks the worker. argv list (no shell) so
+        # the project path can't be interpreted as a command.
+        subprocess.Popen(
+            [cmd, path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
+    except Exception as e:
+        logger.warning(f"open-ide launch failed ({spec['key']}): {e}")
+        return jsonify({"error": f"failed to launch {spec['label']}"}), 500
+
+    emit_event("INFO", f"opened {project_name} in {spec['label']}")
+    return jsonify({"ok": True, "ide": spec["key"], "label": spec["label"], "source": source})
+
+
+# Browser opener per platform. The dashboard often runs full-screen, so a JS
+# `window.open(..., '_blank')` tab opens *behind* it and looks like nothing
+# happened. Launching from the server pops the URL in the real default browser,
+# same trick used for "Open IDE".
+def _url_opener():
+    if sys.platform == "darwin":
+        return ["open"]
+    if sys.platform.startswith("win"):
+        return ["cmd", "/c", "start", ""]
+    # Linux / BSD
+    opener = shutil.which("xdg-open") or shutil.which("gio")
+    if opener and opener.endswith("gio"):
+        return [opener, "open"]
+    return [opener] if opener else None
+
+
+def _probe_url(url, timeout=1.5):
+    """Return True if *something* is serving HTTP at url.
+
+    We treat any HTTP status (even 4xx/5xx/redirects) as "alive" — the goal is
+    only to pick a host:port that actually has a server listening, not to judge
+    the app's health. Connection refused / DNS failure / reset => not alive.
+    """
+    import urllib.request
+    import urllib.error
+    import ssl
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        urllib.request.urlopen(req, timeout=timeout, context=ctx)
+        return True
+    except urllib.error.HTTPError:
+        # Got an HTTP response (some status code) → server is alive.
+        return True
+    except Exception:
+        # Some servers reject HEAD; retry once with GET before giving up.
+        try:
+            req = urllib.request.Request(url, method="GET")
+            urllib.request.urlopen(req, timeout=timeout, context=ctx)
+            return True
+        except urllib.error.HTTPError:
+            return True
+        except Exception:
+            return False
+
+
+def _pick_live_url(candidates, timeout=1.5):
+    """Probe candidate URLs in order; return the first that responds, else None."""
+    for url in candidates:
+        if _probe_url(url, timeout=timeout):
+            return url
+    return None
+
+
+@app.route("/api/open-url", methods=["POST"])
+@rate_limit()
+def api_open_url():
+    """Open an http(s) URL (e.g. a docker container port) in the default browser.
+
+    Accepts either a single ``url`` or a ranked ``candidates`` list. When
+    candidates are given we probe them server-side and open the first one that
+    actually has something listening — so a port that only answers on
+    127.0.0.1 (not the IPv6 ``localhost``) or behind a custom dev domain still
+    opens the working page.
+    """
+    from urllib.parse import urlparse
+
+    data = request.get_json(force=True, silent=True) or {}
+
+    raw_candidates = data.get("candidates")
+    if isinstance(raw_candidates, list) and raw_candidates:
+        candidates = [str(c).strip() for c in raw_candidates if str(c).strip()]
+    else:
+        single = (data.get("url") or "").strip()
+        candidates = [single] if single else []
+
+    if not candidates:
+        return jsonify({"error": "url or candidates required"}), 400
+
+    # Validate every candidate up-front; reject the whole request if any is
+    # not a plain http/https URL (defends against file://, javascript:, etc).
+    for c in candidates:
+        parsed = urlparse(c)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return jsonify({"error": f"invalid url: {c}"}), 400
+
+    opener = _url_opener()
+    if not opener:
+        return jsonify({"error": "no browser opener found (install xdg-open)"}), 404
+
+    # If we have more than one option, probe to find one that's actually live.
+    if len(candidates) > 1:
+        live = _pick_live_url(candidates)
+        url = live or candidates[0]
+        probed = True
+    else:
+        url = candidates[0]
+        probed = False
+
+    try:
+        # argv list (no shell) so the URL can't be interpreted as a command.
+        subprocess.Popen(
+            opener + [url],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
+    except Exception as e:
+        logger.warning(f"open-url launch failed: {e}")
+        return jsonify({"error": "failed to open url"}), 500
+
+    emit_event("INFO", f"opened {url} in browser")
+    return jsonify({"ok": True, "url": url, "probed": probed})
+
+
 @app.route("/favicon.ico")
 def favicon():
     # No icon asset shipped; answer cleanly instead of 404ing the console.
@@ -429,6 +791,20 @@ def api_health():
 @app.route("/api/version")
 def api_version():
     return jsonify({"version": __version__})
+
+
+@app.route("/api/docker")
+@rate_limit()
+def api_docker():
+    """Snapshot of running docker containers + their published ports."""
+    return jsonify(docker_service.get_containers())
+
+
+@app.route("/api/agents")
+@rate_limit()
+def api_agents():
+    """Snapshot of currently running agents (live cc-* tmux sessions)."""
+    return jsonify(get_running_agents())
 
 
 @app.route("/api/projects")
@@ -517,6 +893,85 @@ def api_add_project():
     switcher.save_projects(projects)
     emit_event("INFO", f"added project {name} → {path}")
     return jsonify({"ok": True, "project": new_proj})
+
+
+# Map of accepted image MIME types -> file extension. Anything not here is
+# rejected so we never write arbitrary uploaded bytes to disk.
+PASTE_IMAGE_TYPES = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/bmp": ".bmp",
+}
+PASTE_MAX_BYTES = 25 * 1024 * 1024  # 25 MB cap to avoid filling the disk
+
+
+@app.route("/api/paste-image", methods=["POST"])
+@rate_limit()
+def api_paste_image():
+    """Save an image pasted in the browser and return a path the agent can read.
+
+    The browser terminal (xterm.js) can only transmit text over the socket, so
+    clipboard images never reach the agent. The frontend POSTs the image blob
+    here; we persist it inside the project's `.cc_pastes/` dir (so a cwd-bound
+    agent like Claude can read it without leaving its working directory) and
+    return the path to type into the prompt.
+    """
+    f = request.files.get("image")
+    if f is None:
+        return jsonify({"error": "no image part"}), 400
+
+    mime = (f.mimetype or "").lower()
+    ext = PASTE_IMAGE_TYPES.get(mime)
+    if ext is None:
+        return jsonify({"error": f"unsupported image type: {mime or 'unknown'}"}), 400
+
+    data = f.read(PASTE_MAX_BYTES + 1)
+    if not data:
+        return jsonify({"error": "empty image"}), 400
+    if len(data) > PASTE_MAX_BYTES:
+        return jsonify({"error": "image too large (max 25 MB)"}), 413
+
+    # Resolve where to save. Prefer a folder inside the project so the path is
+    # relative and readable by a cwd-restricted agent; otherwise fall back to a
+    # shared temp dir under ~/.claude.
+    project_name = (request.form.get("project") or "").strip() or None
+    proj = _resolve_project(project_name) if project_name else None
+    proj_path = proj.get("path") if proj else None
+
+    if proj_path and os.path.isdir(proj_path):
+        save_dir = os.path.join(proj_path, ".cc_pastes")
+        base_for_rel = proj_path
+    else:
+        save_dir = str(Path.home() / ".claude" / "commandcenter_pastes")
+        base_for_rel = None
+
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+    except OSError as e:
+        logger.warning(f"paste-image mkdir failed: {e}")
+        return jsonify({"error": "could not create save directory"}), 500
+
+    fname = f"pasted-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}{ext}"
+    abs_path = os.path.join(save_dir, fname)
+    try:
+        with open(abs_path, "wb") as out:
+            out.write(data)
+    except OSError as e:
+        logger.warning(f"paste-image write failed: {e}")
+        return jsonify({"error": "could not save image"}), 500
+
+    # Path the user should type. Relative (with ./) when inside the project so
+    # the agent reads it straight from its cwd; absolute otherwise.
+    if base_for_rel:
+        inject = "./" + os.path.relpath(abs_path, base_for_rel)
+    else:
+        inject = abs_path
+
+    emit_event("INFO", f"pasted image saved → {inject} ({len(data)} bytes)")
+    return jsonify({"ok": True, "path": abs_path, "inject": inject, "bytes": len(data)})
 
 
 @app.route("/api/projects/<name>", methods=["DELETE"])
@@ -745,6 +1200,63 @@ def weather_thread():
         gevent.sleep(60)
 
 
+def docker_thread():
+    logger.info("THREAD_START: docker_thread")
+    if not docker_service.is_available():
+        logger.info("docker_thread: docker CLI not found, thread idling")
+    while True:
+        try:
+            socketio.emit("docker_update", docker_service.get_containers())
+        except Exception as exc:
+            logger.warning(f"docker_thread error: {exc}")
+        gevent.sleep(5)
+
+
+# Live tmux session names look like: cc-<project>-<panel>-<agent>
+# where <agent> is one of AGENT_CYCLE. Parse those back out to report which
+# agents are actually running (have a live session) right now.
+def get_running_agents():
+    """Return running-agent info derived from live cc-* tmux sessions.
+
+    Returns {"count": int, "agents": [...], "sessions": [{project, panel, agent}]}
+    """
+    sessions = []
+    agents_seen = []
+    try:
+        for name in tmux.list_windows():  # cc-* sessions only
+            body = name[3:]  # strip "cc-"
+            parts = body.rsplit("-", 2)
+            if len(parts) != 3:
+                continue
+            project, panel, agent = parts
+            if agent not in AGENT_CYCLE:
+                continue
+            sessions.append({"project": project, "panel": panel, "agent": agent})
+            agents_seen.append(agent)
+    except Exception as exc:
+        logger.warning(f"get_running_agents error: {exc}")
+
+    # Order agents by AGENT_CYCLE, de-duplicated, for a stable display.
+    unique = [a for a in AGENT_CYCLE if a in agents_seen]
+    return {
+        "count": len(sessions),
+        "agents": unique,
+        "sessions": sessions,
+    }
+
+
+def agents_thread():
+    logger.info("THREAD_START: agents_thread")
+    if not tmux.is_available():
+        logger.info("agents_thread: tmux not available, thread idling")
+    while True:
+        try:
+            socketio.emit("agents_update", get_running_agents())
+        except Exception as exc:
+            logger.warning(f"agents_thread error: {exc}")
+        gevent.sleep(5)
+
+
 # Fingerprints that mean an agent pane is still on its first-launch / login
 # screen — never typed in, never authed. Combined with idle time + the "not
 # currently bound to a visible panel" check, these mark sessions safe to kill.
@@ -880,6 +1392,16 @@ def handle_connect():
         socketio.emit("weather_update", {"text": text, **data}, to=request.sid)
     except Exception as e:
         logger.warning(f"socket weather on connect failed: {e}")
+    # Send docker snapshot immediately on connect
+    try:
+        socketio.emit("docker_update", docker_service.get_containers(), to=request.sid)
+    except Exception as e:
+        logger.warning(f"socket docker on connect failed: {e}")
+    # Send running-agents snapshot immediately on connect
+    try:
+        socketio.emit("agents_update", get_running_agents(), to=request.sid)
+    except Exception as e:
+        logger.warning(f"socket agents on connect failed: {e}")
 
 
 @socketio.on("disconnect")
@@ -1250,6 +1772,10 @@ if __name__ == "__main__":
     logger.info("  -> network_thread started")
     socketio.start_background_task(weather_thread)
     logger.info("  -> weather_thread started")
+    socketio.start_background_task(docker_thread)
+    logger.info("  -> docker_thread started")
+    socketio.start_background_task(agents_thread)
+    logger.info("  -> agents_thread started")
     socketio.start_background_task(git_thread)
     logger.info("  -> git_thread started")
     socketio.start_background_task(tmux_janitor)

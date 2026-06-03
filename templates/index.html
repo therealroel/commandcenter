@@ -56,7 +56,7 @@ body {
   line-height: 1.5;
   height: 100vh;
   display: grid;
-  grid-template-rows: 52px auto auto 1fr 34px;
+  grid-template-rows: 52px auto auto auto 1fr 34px;
   overflow: hidden;
   letter-spacing: 0.02em;
 }
@@ -251,6 +251,24 @@ body::after {
   50% { box-shadow: 0 0 14px rgba(255,68,102,0.4); }
 }
 
+/* Clickable stat cards (e.g. EVENTS opens the log popover). */
+.stat-card.clickable { cursor: pointer; }
+.stat-card.clickable:hover { border-color: var(--cyan-dim); box-shadow: var(--shadow); }
+
+/* EVENTS card severity tint — driven by the worst event type seen. */
+.stat-card.ev-ok .stat-value   { color: var(--green);  text-shadow: var(--glow-green); }
+.stat-card.ev-ok .stat-label .dot { background: var(--green); box-shadow: var(--glow-green); }
+
+.stat-card.ev-warn { border-color: rgba(255,170,0,0.4); }
+.stat-card.ev-warn::before, .stat-card.ev-warn::after { border-color: var(--yellow); }
+.stat-card.ev-warn .stat-value { color: var(--yellow); text-shadow: 0 0 6px rgba(255,170,0,0.5); }
+.stat-card.ev-warn .stat-label .dot { background: var(--yellow); box-shadow: 0 0 6px rgba(255,170,0,0.6); }
+
+.stat-card.ev-err { border-color: rgba(255,68,102,0.5); }
+.stat-card.ev-err::before, .stat-card.ev-err::after { border-color: var(--red); }
+.stat-card.ev-err .stat-value { color: var(--red); text-shadow: var(--glow-red); }
+.stat-card.ev-err .stat-label .dot { background: var(--red); box-shadow: var(--glow-red); }
+
 .stat-label {
   font-size: 11px;
   color: var(--text-secondary);
@@ -363,7 +381,7 @@ body::after {
 
 /* Bottom-of-panel bash terminal (toggled per panel). */
 .term-toggle {
-  margin-left: auto;
+  margin-left: 6px;
   background: transparent;
   border: 1px solid var(--border-bright);
   color: var(--text-secondary);
@@ -385,6 +403,37 @@ body::after {
   border-color: var(--cyan);
   color: var(--cyan);
   box-shadow: 0 0 8px rgba(0,217,255,0.3);
+}
+
+/* "Open IDE" button — first of the right-aligned button group. */
+.ide-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.ide-btn:hover {
+  color: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 8px rgba(0,255,136,0.25);
+}
+.ide-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.ide-btn.busy {
+  color: var(--green);
+  border-color: var(--green);
 }
 
 .bash-splitter {
@@ -902,6 +951,190 @@ body::after {
   .radar { display: none; }
 }
 
+/* ============= DOCKER DOCK ============= */
+.docker-dock {
+  padding: 6px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(13,20,29,0.4), transparent);
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.docker-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.docker-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.docker-title .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: var(--glow-green);
+  display: inline-block;
+}
+.docker-title .dot.off { background: var(--text-dim); box-shadow: none; }
+.docker-title .dot.err { background: var(--red); box-shadow: var(--glow-red); }
+
+.docker-summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.1em;
+}
+
+.docker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 168px;
+  scrollbar-width: thin;
+}
+.docker-grid::-webkit-scrollbar { width: 4px; height: 4px; }
+.docker-grid::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+.docker-card {
+  background: linear-gradient(180deg, var(--card), var(--card-2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.docker-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 8px; height: 8px;
+  border-top: 1px solid var(--cyan-dim);
+  border-left: 1px solid var(--cyan-dim);
+}
+.docker-card:hover {
+  border-color: var(--border-bright);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.docker-card.exited { opacity: 0.6; }
+.docker-card.exited::before { border-color: var(--text-dim); }
+
+.docker-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.docker-state-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--green);
+  box-shadow: var(--glow-green);
+}
+.docker-state-dot.exited,
+.docker-state-dot.created,
+.docker-state-dot.paused { background: var(--yellow); box-shadow: 0 0 6px rgba(255,170,0,0.5); }
+.docker-state-dot.dead,
+.docker-state-dot.restarting { background: var(--red); box-shadow: var(--glow-red); }
+
+.docker-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.docker-project {
+  font-size: 9px;
+  color: var(--yellow);
+  letter-spacing: 0.12em;
+  padding: 1px 5px;
+  border: 1px solid rgba(255,170,0,0.3);
+  border-radius: 2px;
+  text-transform: uppercase;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.docker-image {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.docker-status {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.docker-ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.docker-port {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--cyan);
+  background: rgba(0,217,255,0.06);
+  border: 1px solid rgba(0,217,255,0.25);
+  border-radius: 2px;
+  padding: 2px 6px;
+  text-decoration: none;
+  letter-spacing: 0.03em;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.docker-port:hover {
+  background: rgba(0,217,255,0.16);
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0,217,255,0.3);
+}
+.docker-port.opening {
+  background: rgba(0,255,136,0.18);
+  border-color: var(--green);
+  color: var(--green);
+  box-shadow: 0 0 8px rgba(0,255,136,0.35);
+}
+.docker-port .arrow { color: var(--text-dim); }
+.docker-port-internal {
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  border: 1px dashed var(--border-bright);
+  border-radius: 2px;
+  letter-spacing: 0.03em;
+}
+.docker-empty {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  padding: 10px 2px;
+  text-align: center;
+}
+
 /* ============= PROJECTS STRIP ============= */
 .projects-strip {
   display: flex;
@@ -1133,6 +1366,45 @@ body::after {
   color: var(--text-dim);
   margin-top: 8px;
   text-align: center;
+}
+
+.menu-select-full {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 36px 10px 14px;
+  cursor: pointer;
+  /* native arrow off → custom chevron drawn via background SVG */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2300d9ff' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.menu-select-full:hover {
+  border-color: var(--cyan-dim);
+}
+.menu-select-full:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0,217,255,0.25);
+}
+.menu-select-full option {
+  background: var(--bg-2);
+  color: var(--text-primary);
+}
+.menu-select-full optgroup {
+  background: var(--bg);
+  color: var(--text-dim);
+  font-style: normal;
+  font-weight: 600;
 }
 
 .form-group {
@@ -1721,7 +1993,6 @@ body::after {
       <span class="live-dot" id="live-dot"></span>
       <span id="conn-status">ONLINE</span>
     </div>
-    <div class="header-pill"><span class="label">SES</span><span id="session-timer">00:00:00</span></div>
   </div>
   <div class="clock" id="clock">--:--:--</div>
   <div class="header-right">
@@ -1779,6 +2050,18 @@ body::after {
             </label>
           </div>
         </div>
+        <div class="menu-section">
+          <div class="menu-section-title">IDE</div>
+          <div class="menu-section-desc">Which editor the per-channel "Open IDE" button launches. Auto-detect picks the IDE you're currently running.</div>
+          <select id="ide-select" class="menu-select-full">
+            <option value="auto">Loading…</option>
+          </select>
+          <div class="form-group" id="ide-custom-group" style="display:none; margin-top:10px;">
+            <label>Custom launcher command</label>
+            <input type="text" id="ide-custom-input" placeholder="e.g. nvim-qt, lapce, /opt/foo/bin/editor" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="menu-note" id="ide-note"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1811,19 +2094,28 @@ body::after {
   </div>
   <div class="stat-card" id="stat-uptime">
     <div class="stat-label">UPTIME <span class="dot"></span></div>
-    <div class="stat-value" style="font-size: 17px;">--</div>
-    <div class="stat-sub">SYS BOOT</div>
+    <div class="stat-value" style="font-size: 17px;" id="uptime-display">--</div>
+    <div class="stat-sub">SES <span id="session-timer">00:00:00</span></div>
   </div>
   <div class="stat-card" id="stat-agents">
     <div class="stat-label">AGENTS <span class="dot"></span></div>
-    <div class="stat-value" style="font-size:17px;"><span id="agent-active">2</span> / 3 ACTIVE</div>
-    <div class="stat-sub" id="agent-list">opencode · claude</div>
+    <div class="stat-value" style="font-size:17px;"><span id="agent-active">0</span> RUNNING</div>
+    <div class="stat-sub" id="agent-list">none</div>
   </div>
-  <div class="stat-card" id="stat-events">
+  <div class="stat-card clickable" id="stat-events" title="Click to view the event log">
     <div class="stat-label">EVENTS <span class="dot"></span></div>
     <div class="stat-value" style="font-size:17px;"><span id="ev-count">0</span> LOGGED</div>
     <div class="stat-sub" id="ev-last">awaiting signal...</div>
   </div>
+</div>
+
+<!-- ============= DOCKER DOCK ============= -->
+<div class="docker-dock" id="docker-dock">
+  <div class="docker-head">
+    <span class="docker-title">&#x1F433; CONTAINERS <span class="dot" id="docker-dot"></span></span>
+    <span class="docker-summary" id="docker-summary">scanning...</span>
+  </div>
+  <div class="docker-grid" id="docker-grid"></div>
 </div>
 
 <!-- ============= PROJECTS STRIP ============= -->
@@ -1854,6 +2146,7 @@ body::after {
       </span>
       <span class="panel-project">commandcenter</span>
       <span class="git-pill" id="git-0" title="git status">--</span>
+      <button class="ide-btn" data-panel="0" title="Open this project in your IDE">Open IDE</button>
       <button class="term-toggle" data-panel="0" title="Toggle bash terminal in this channel">Terminal</button>
       <div class="status-dot disconnected" id="status-0"></div>
     </div>
@@ -1874,6 +2167,7 @@ body::after {
       </span>
       <span class="panel-project">aws-infra</span>
       <span class="git-pill" id="git-1" title="git status">--</span>
+      <button class="ide-btn" data-panel="1" title="Open this project in your IDE">Open IDE</button>
       <button class="term-toggle" data-panel="1" title="Toggle bash terminal in this channel">Terminal</button>
       <div class="status-dot disconnected" id="status-1"></div>
     </div>
@@ -1894,6 +2188,7 @@ body::after {
       </span>
       <span class="panel-project">--</span>
       <span class="git-pill" id="git-2" title="git status">--</span>
+      <button class="ide-btn" data-panel="2" title="Open this project in your IDE">Open IDE</button>
       <button class="term-toggle" data-panel="2" title="Toggle bash terminal in this channel">Terminal</button>
       <div class="status-dot disconnected" id="status-2"></div>
     </div>
@@ -2435,6 +2730,54 @@ body::after {
         socket.emit('term_input', { panel: panelId, data: seq });
       }
     }, { passive: false });
+
+    // Image paste: xterm.js can only send text over the socket, so a clipboard
+    // image never reaches the agent (it just sees "no image found"). Intercept
+    // the paste, upload the blob, and type the saved file path into the prompt
+    // so the agent can read it as a file reference.
+    host.addEventListener('paste', (e) => handleTermImagePaste(e, panelId));
+  }
+
+  async function handleTermImagePaste(e, panelId) {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    let imageItem = null;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
+        imageItem = it;
+        break;
+      }
+    }
+    // No image on the clipboard → let xterm handle the normal text paste.
+    if (!imageItem) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const blob = imageItem.getAsFile();
+    if (!blob) return;
+
+    const t = terms[panelId];
+    if (t && t.term) t.term.write('\r\n\x1b[36m[uploading pasted image…]\x1b[0m\r\n');
+
+    try {
+      const fd = new FormData();
+      fd.append('image', blob, 'pasted');
+      const proj = panelProject[panelId];
+      if (proj) fd.append('project', proj);
+      const res = await fetch('/api/paste-image', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      // Type the path into the terminal, wrapped in spaces so the agent picks
+      // it up cleanly. The user can hit Enter (or add more text) themselves.
+      socket.emit('term_input', { panel: panelId, data: data.inject + ' ' });
+    } catch (err) {
+      if (t && t.term) {
+        t.term.write(`\r\n\x1b[31m[image paste failed: ${String(err.message || err)}]\x1b[0m\r\n`);
+      }
+    }
   }
 
   socket.on('term_output', (msg) => {
@@ -2615,6 +2958,46 @@ body::after {
     });
   });
 
+  // Wire up the per-panel "Open IDE" button. Opens the panel's project folder
+  // in the IDE chosen in Settings (or the auto-detected one).
+  document.querySelectorAll('.ide-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const panelId = parseInt(btn.dataset.panel, 10);
+      const proj = panelProject[panelId];
+      if (!proj) {
+        const t = terms[panelId];
+        if (t && t.term) t.term.write('\r\n\x1b[33m[no project bound to this panel]\x1b[0m\r\n');
+        return;
+      }
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.classList.add('busy');
+      btn.textContent = 'Opening…';
+      try {
+        const r = await fetch('/api/open-ide', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({project: proj})
+        });
+        const j = await r.json();
+        if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+        btn.textContent = `✓ ${j.label}`;
+        const t = terms[panelId];
+        if (t && t.term) t.term.write(`\r\n\x1b[32m[opening ${proj} in ${j.label}]\x1b[0m\r\n`);
+      } catch (err) {
+        btn.textContent = '✗ failed';
+        const t = terms[panelId];
+        if (t && t.term) t.term.write(`\r\n\x1b[31m[open IDE failed: ${String(err.message || err)}]\x1b[0m\r\n`);
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.classList.remove('busy');
+          btn.textContent = original;
+        }, 1800);
+      }
+    });
+  });
+
   /* ===== SETTINGS MENU ===== */
   async function loadConfigProfile() {
     try {
@@ -2742,6 +3125,7 @@ body::after {
     menuOverlay.classList.add('open');
     loadConfigProfile();
     loadAutoCloseSetting();
+    loadIdeSetting();
   });
   menuClose.addEventListener('click', () => {
     menuOverlay.classList.remove('open');
@@ -2761,6 +3145,110 @@ body::after {
       console.error('Failed to load auto-close setting');
     }
   }
+
+  // IDE picker: populate the dropdown from installed IDEs, mark the detected
+  // default, and persist the user's choice. Supports a custom launcher command
+  // for editors not in the known list.
+  const ideSelect = document.getElementById('ide-select');
+  const ideNote = document.getElementById('ide-note');
+  const ideCustomGroup = document.getElementById('ide-custom-group');
+  const ideCustomInput = document.getElementById('ide-custom-input');
+  let ideCustomSaveTimer = null;
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+  }
+
+  async function loadIdeSetting() {
+    try {
+      const r = await fetch('/api/ide/list');
+      const j = await r.json();
+      const ides = j.ides || [];
+      const detectedLabel = j.detected_label;
+      const autoLabel = detectedLabel ? `Auto-detect (${detectedLabel})` : 'Auto-detect';
+
+      let html = `<option value="auto">${escHtml(autoLabel)}</option>`;
+      if (ides.length) {
+        html += '<optgroup label="Installed">';
+        for (const ide of ides) {
+          const running = ide.running ? ' • running' : '';
+          html += `<option value="${escHtml(ide.key)}">${escHtml(ide.label)}${running}</option>`;
+        }
+        html += '</optgroup>';
+      }
+      html += '<optgroup label="Other"><option value="custom">Custom command…</option></optgroup>';
+      ideSelect.innerHTML = html;
+      ideSelect.value = j.selected || 'auto';
+
+      if (j.selected === 'custom') {
+        ideCustomGroup.style.display = '';
+        ideCustomInput.value = j.custom_cmd || '';
+      } else {
+        ideCustomGroup.style.display = 'none';
+      }
+
+      if (!ides.length) {
+        ideNote.textContent = 'No known IDE detected — use "Custom command" to point at your editor.';
+      } else if (j.detected) {
+        ideNote.textContent = `Detected ${detectedLabel} in use.`;
+      } else {
+        ideNote.textContent = '';
+      }
+    } catch (e) {
+      console.error('Failed to load IDE list', e);
+      ideNote.textContent = 'Could not load IDE list.';
+    }
+  }
+
+  async function saveIdeChoice(payload) {
+    const r = await fetch('/api/settings/ide', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    return j;
+  }
+
+  ideSelect.addEventListener('change', async () => {
+    const ide = ideSelect.value;
+    if (ide === 'custom') {
+      ideCustomGroup.style.display = '';
+      ideCustomInput.focus();
+      ideNote.textContent = 'Enter the command that launches your editor.';
+      return;
+    }
+    ideCustomGroup.style.display = 'none';
+    try {
+      await saveIdeChoice({ide});
+      ideNote.textContent = ide === 'auto'
+        ? 'Will auto-detect the running IDE.'
+        : `Saved: ${ideSelect.options[ideSelect.selectedIndex].text.replace(' • running','')}`;
+    } catch (e) {
+      console.error('Failed to save IDE setting', e);
+      ideNote.textContent = `Failed to save: ${e.message}`;
+    }
+  });
+
+  // Debounced save of the custom command as the user types.
+  ideCustomInput.addEventListener('input', () => {
+    clearTimeout(ideCustomSaveTimer);
+    ideCustomSaveTimer = setTimeout(async () => {
+      const cmd = ideCustomInput.value.trim();
+      if (!cmd) { ideNote.textContent = 'Enter a launcher command.'; return; }
+      try {
+        const j = await saveIdeChoice({ide: 'custom', cmd});
+        ideNote.textContent = j.found
+          ? `Saved: ${cmd} (found on PATH)`
+          : `Saved: ${cmd} — not found on PATH yet, launch may fail.`;
+      } catch (e) {
+        ideNote.textContent = `Failed to save: ${e.message}`;
+      }
+    }, 500);
+  });
 
   /* ===== AWAITING-INPUT BORDER PULSE ===== */
   socket.on('panel_awaiting', (msg) => {
@@ -2799,19 +3287,6 @@ body::after {
       });
       host.appendChild(chip);
     });
-    // Update agents stat card with open project count
-    const activeCount = new Set(
-      Object.entries(panelProject)
-        .filter(([pid, name]) => parseInt(pid) < panelCount && name != null)
-        .map(([pid, name]) => name)
-    ).size;
-    document.getElementById('agent-active').textContent = activeCount;
-    const activeNames = [...new Set(
-      Object.entries(panelProject)
-        .filter(([pid, name]) => parseInt(pid) < panelCount && name != null)
-        .map(([pid, name]) => name)
-    )].join(' · ') || 'none';
-    document.getElementById('agent-list').textContent = activeNames;
   }
 
   // strip "+ ADD PROJECT" button: open palette straight to browse mode
@@ -2950,8 +3425,6 @@ body::after {
     applyProjectToPanel(panelId);
     socket.emit('term_close', { panel: panelId });
     openTerm(panelId);
-    document.getElementById('agent-list').textContent =
-      panels.map(p => `${panelProject[p.id] || '?'}:${AGENTS[p.agentIdx].name}`).join(' · ');
     renderProjectsStrip();
     saveSettings();
   }
@@ -3332,14 +3805,137 @@ body::after {
   }
 
   function updateUptime(value) {
-    const card = document.getElementById('stat-uptime');
-    if (!card) return;
-    card.querySelector('.stat-value').textContent = value || '--';
+    const el = document.getElementById('uptime-display');
+    if (!el) return;
+    el.textContent = value || '--';
   }
 
   /* ===== WEATHER ===== */
   socket.on('weather_update', (data) => {
     document.getElementById('weather-display').textContent = data.text || '--';
+  });
+
+  /* ===== DOCKER ===== */
+  socket.on('docker_update', (data) => renderDocker(data));
+
+  /* ===== RUNNING AGENTS ===== */
+  socket.on('agents_update', (data) => renderAgents(data));
+
+  function renderAgents(data) {
+    const card = document.getElementById('stat-agents');
+    if (!card) return;
+    const countEl = document.getElementById('agent-active');
+    const listEl = document.getElementById('agent-list');
+    const count = (data && typeof data.count === 'number') ? data.count : 0;
+    countEl.textContent = count;
+
+    const sessions = (data && data.sessions) || [];
+    if (!sessions.length) {
+      listEl.textContent = 'none';
+      return;
+    }
+    // Show "emoji project" per running session, ordered as returned.
+    const byName = Object.fromEntries(AGENTS.map(a => [a.name, a]));
+    listEl.textContent = sessions
+      .map(s => {
+        const a = byName[s.agent];
+        const emoji = a ? a.emoji : '';
+        return `${emoji} ${s.project}`;
+      })
+      .join(' · ');
+  }
+
+  function renderDocker(data) {
+    const grid = document.getElementById('docker-grid');
+    const dot = document.getElementById('docker-dot');
+    const summary = document.getElementById('docker-summary');
+    if (!grid) return;
+
+    if (!data || data.available === false) {
+      dot.className = 'dot off';
+      summary.textContent = (data && data.reason) ? data.reason : 'docker unavailable';
+      grid.innerHTML = '<div class="docker-empty">No docker daemon detected.</div>';
+      return;
+    }
+
+    const containers = data.containers || [];
+    const running = containers.filter(c => c.state === 'running').length;
+    const published = containers.reduce((n, c) => n + (c.ports || []).length, 0);
+    dot.className = 'dot';
+    summary.textContent = `${running}/${containers.length} running · ${published} port${published === 1 ? '' : 's'} mapped`;
+
+    if (!containers.length) {
+      grid.innerHTML = '<div class="docker-empty">No running containers.</div>';
+      return;
+    }
+
+    grid.innerHTML = '';
+    containers.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'docker-card' + (c.state === 'running' ? '' : ' exited');
+
+      const ports = (c.ports || []).map(p => {
+        const label = p.host_port === p.container_port
+          ? `${p.host_port}`
+          : `${p.host_port} → ${p.container_port}`;
+        // Candidates are probed server-side on click; open the first that's
+        // actually live. Stash them as JSON on the element.
+        const candidates = (p.candidates && p.candidates.length) ? p.candidates : [p.url];
+        const candAttr = escapeHtml(JSON.stringify(candidates));
+        return `<a class="docker-port" href="${escapeHtml(p.url)}" data-open-url="${escapeHtml(p.url)}" data-candidates="${candAttr}" rel="noopener" title="Open port ${escapeHtml(p.host_port)} (→ container ${escapeHtml(p.container_port)}/${escapeHtml(p.proto)})&#10;tries: ${escapeHtml(candidates.join(', '))}">:${escapeHtml(label)}</a>`;
+      }).join('');
+      const portsHtml = ports
+        ? `<div class="docker-ports">${ports}</div>`
+        : `<div class="docker-ports"><span class="docker-port-internal">no published ports</span></div>`;
+
+      const projectTag = c.project
+        ? `<span class="docker-project" title="compose project">${escapeHtml(c.project)}</span>`
+        : '';
+
+      card.innerHTML = `
+        <div class="docker-card-top">
+          <span class="docker-state-dot ${escapeHtml(c.state)}"></span>
+          <span class="docker-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+          ${projectTag}
+        </div>
+        <div class="docker-image" title="${escapeHtml(c.image)}">${escapeHtml(c.image)}</div>
+        <div class="docker-status">${escapeHtml(c.status)}</div>
+        ${portsHtml}
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  // Open container port links via the server so they pop in the real default
+  // browser even when the dashboard is running full-screen (a plain _blank tab
+  // would open hidden behind the kiosk window). Delegated so it survives the
+  // grid being re-rendered every few seconds.
+  document.getElementById('docker-grid').addEventListener('click', (e) => {
+    const link = e.target.closest('[data-open-url]');
+    if (!link) return;
+    e.preventDefault();
+    const url = link.getAttribute('data-open-url');
+    if (!url) return;
+    let candidates = [url];
+    try {
+      const parsed = JSON.parse(link.getAttribute('data-candidates') || '[]');
+      if (Array.isArray(parsed) && parsed.length) candidates = parsed;
+    } catch (_) { /* fall back to single url */ }
+    link.classList.add('opening');
+    fetch('/api/open-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, candidates })
+    }).then(r => r.json()).then(j => {
+      if (!j.ok) {
+        // Fall back to a normal new tab if the server couldn't open it.
+        window.open(url, '_blank', 'noopener');
+      }
+    }).catch(() => {
+      window.open(url, '_blank', 'noopener');
+    }).finally(() => {
+      setTimeout(() => link.classList.remove('opening'), 600);
+    });
   });
 
   /* ===== EVENT LOG ===== */
@@ -3350,10 +3946,25 @@ body::after {
     events.unshift(entry);
     if (events.length > 50) events.pop();
     renderEvents();
-    document.getElementById('ev-count').textContent = events.length;
-    document.getElementById('ev-last').textContent = entry.message.slice(0, 32);
+    updateEventsCard(entry);
     pushTicker(entry.type, entry.message);
   });
+
+  // Tint the EVENTS card by the severity of the most recent event:
+  //   ERROR -> red, TOOL/THINK -> yellow, INFO/anything else -> green.
+  function updateEventsCard(entry) {
+    const card = document.getElementById('stat-events');
+    if (!card) return;
+    document.getElementById('ev-count').textContent = events.length;
+    document.getElementById('ev-last').textContent =
+      (entry.message || '').slice(0, 32) || '—';
+
+    card.classList.remove('ev-ok', 'ev-warn', 'ev-err');
+    const t = (entry.type || 'INFO').toUpperCase();
+    if (t === 'ERROR') card.classList.add('ev-err');
+    else if (t === 'TOOL' || t === 'THINK' || t === 'WARN') card.classList.add('ev-warn');
+    else card.classList.add('ev-ok');
+  }
 
   function renderEvents() {
     const container = document.getElementById('event-log-entries');
@@ -3380,6 +3991,7 @@ body::after {
 
   document.getElementById('event-log-toggle').addEventListener('click', toggleLog);
   document.getElementById('event-close').addEventListener('click', toggleLog);
+  document.getElementById('stat-events').addEventListener('click', toggleLog);
   function toggleLog() {
     eventLogOpen = !eventLogOpen;
     document.getElementById('event-log').classList.toggle('open', eventLogOpen);
@@ -3446,8 +4058,6 @@ body::after {
     btn.className = `agent-btn ${agent.cls}`;
     btn.dataset.panel = panelId;
     document.getElementById(`agent-name-${panelId}`).textContent = agent.name;
-    document.getElementById('agent-list').textContent =
-      panels.map(p => AGENTS[p.agentIdx].name).join(' · ');
     // persist on server side if we know the project
     const projName = panelProject[panelId];
     if (projName) {
