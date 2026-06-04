@@ -56,7 +56,8 @@ body {
   line-height: 1.5;
   height: 100vh;
   display: grid;
-  grid-template-rows: 52px auto auto auto 1fr 34px;
+  /* rows: header · status-rail · docker-dock · claude-subs-dock · projects-strip · main(1fr) · footer */
+  grid-template-rows: 52px auto auto auto auto 1fr 34px;
   overflow: hidden;
   letter-spacing: 0.02em;
 }
@@ -301,6 +302,28 @@ body::after {
   color: var(--text-secondary);
   margin-top: 2px;
   letter-spacing: 0.05em;
+}
+
+/* AGENTS card: the running-session list collapses away on click. */
+.agent-caret {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-left: auto;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+#stat-agents.collapsed .agent-caret { transform: rotate(-90deg); }
+#stat-agents.collapsed #agent-list {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+#stat-agents #agent-list {
+  max-height: 80px;
+  overflow: hidden;
+  transition: max-height 0.2s ease, opacity 0.2s ease;
 }
 
 .sparkline {
@@ -969,7 +992,24 @@ body::after {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
 }
+.docker-head:hover .docker-title { color: var(--text-secondary); }
+
+.docker-caret {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+.docker-head:hover .docker-caret { color: var(--text-secondary); }
+.docker-dock.collapsed .docker-caret { transform: translateX(-50%) rotate(180deg); }
 
 .docker-title {
   font-size: 10px;
@@ -1002,8 +1042,14 @@ body::after {
   gap: 8px;
   overflow-x: hidden;
   overflow-y: auto;
-  max-height: 168px;
+  max-height: 40vh;
   scrollbar-width: thin;
+}
+.docker-dock.collapsed .docker-grid {
+  max-height: 0;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
 }
 .docker-grid::-webkit-scrollbar { width: 4px; height: 4px; }
 .docker-grid::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
@@ -1133,6 +1179,296 @@ body::after {
   letter-spacing: 0.1em;
   padding: 10px 2px;
   text-align: center;
+}
+
+/* ============= CLAUDE SUBS DOCK ============= */
+.subs-dock {
+  padding: 6px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(170,85,255,0.05), transparent);
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subs-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+.subs-head:hover .subs-title { color: var(--text-secondary); }
+
+.subs-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.subs-title .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: var(--glow-green);
+  display: inline-block;
+}
+.subs-title .dot.off { background: var(--text-dim); box-shadow: none; }
+.subs-title .dot.err { background: var(--red); box-shadow: var(--glow-red); }
+.subs-title .dot.warn { background: var(--yellow); box-shadow: 0 0 6px rgba(255,170,0,0.6); }
+
+.subs-summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.1em;
+}
+
+.subs-caret {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-dim);
+  transition: transform 0.2s ease, color 0.2s ease;
+  display: inline-block;
+}
+.subs-head:hover .subs-caret { color: var(--text-secondary); }
+.subs-dock.collapsed .subs-caret { transform: translateX(-50%) rotate(180deg); }
+
+.subs-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 8px;
+  overflow: hidden;
+  max-height: 60vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  transition: max-height 0.2s ease, opacity 0.2s ease;
+}
+.subs-body::-webkit-scrollbar { width: 4px; height: 4px; }
+.subs-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+.subs-dock.collapsed .subs-body {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.subs-card {
+  position: relative;
+  background: linear-gradient(180deg, var(--card), var(--card-2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.subs-card::before {
+  content: '';
+  position: absolute;
+  top: 8px; bottom: 8px; left: 0;
+  border-left: 2px solid var(--green);
+}
+.subs-card.limited::before { border-left-color: var(--red); }
+.subs-card.unknown::before { border-left-color: var(--text-dim); }
+.subs-card.error::before   { border-left-color: var(--yellow); }
+.subs-card:hover {
+  border-color: var(--border-bright);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.subs-card.active {
+  border-color: var(--cyan-dim);
+  box-shadow: 0 0 10px rgba(0,217,255,0.15);
+}
+
+.subs-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.subs-state-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--green);
+  box-shadow: var(--glow-green);
+}
+.subs-state-dot.limited { background: var(--red); box-shadow: var(--glow-red); }
+.subs-state-dot.unknown { background: var(--text-dim); box-shadow: none; }
+.subs-state-dot.error   { background: var(--yellow); box-shadow: 0 0 6px rgba(255,170,0,0.6); }
+
+.subs-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+.subs-plan {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  border: 1px solid var(--border-bright);
+  border-radius: 2px;
+  padding: 1px 5px;
+}
+.subs-active-tag {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+.subs-switch-hint {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.subs-card:hover .subs-switch-hint { opacity: 1; }
+
+.subs-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subs-windows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.subs-window {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.subs-win-label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+}
+/* Visual countdown bar: track whose fill depletes toward the reset time. */
+.subs-bar {
+  position: relative;
+  height: 7px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.subs-bar-fill {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 100%;
+  background: linear-gradient(90deg, var(--green), #5fd38a);
+  border-radius: 4px;
+  transition: width 0.9s linear;
+}
+.subs-bar-fill.warn { background: linear-gradient(90deg, var(--yellow), var(--orange)); }
+.subs-bar-fill.crit { background: linear-gradient(90deg, var(--orange), var(--red)); }
+.subs-reset {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  min-width: 70px;
+  text-align: right;
+}
+.subs-reset.limited { color: var(--red); }
+/* Dim "resets in …" suffix on healthy windows (the rolling 5h/7d clock). */
+.subs-reset-in {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* Inline countdown in the collapsed header — drop the body's fixed width. */
+.subs-summary-wait { color: var(--red); }
+.subs-summary-wait .subs-reset {
+  min-width: 0;
+  text-align: left;
+}
+
+/* AUTO toggle in the header (switch accounts automatically when low). */
+.subs-auto {
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.subs-auto:hover { color: var(--text-secondary); border-color: var(--text-secondary); }
+.subs-auto.on {
+  color: var(--bg);
+  background: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 8px rgba(0,255,136,0.4);
+}
+/* AUTO sits on the left, then title + summary flow naturally; the caret is
+   absolutely centered (overlays, matching the CONTAINERS dock). */
+.subs-head .subs-caret { left: 50%; right: auto; transform: translateX(-50%); }
+.subs-dock.collapsed .subs-head .subs-caret { transform: translateX(-50%) rotate(180deg); }
+
+/* "None available" / status notice banner under the header. */
+.subs-notice {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border-bright);
+  background: rgba(255,170,0,0.08);
+  color: var(--yellow);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.subs-notice.wait { background: rgba(255,68,102,0.1); border-color: rgba(255,68,102,0.4); color: var(--red); }
+.subs-notice.ready { background: rgba(0,255,136,0.1); border-color: rgba(0,255,136,0.4); color: var(--green); }
+.subs-notice.switched { background: rgba(0,217,255,0.1); border-color: var(--cyan-dim); color: var(--cyan); }
+/* display:flex above would otherwise override the [hidden] attribute and leave
+   an empty bordered bar; force it gone when hidden. */
+.subs-notice[hidden] { display: none !important; }
+.subs-error {
+  font-size: 11px;
+  color: var(--yellow);
+  letter-spacing: 0.03em;
+}
+.subs-empty {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  padding: 10px 2px;
+  text-align: center;
+}
+.subs-token {
+  margin-top: 6px;
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
 }
 
 /* ============= PROJECTS STRIP ============= */
@@ -2097,8 +2433,8 @@ body::after {
     <div class="stat-value" style="font-size: 17px;" id="uptime-display">--</div>
     <div class="stat-sub">SES <span id="session-timer">00:00:00</span></div>
   </div>
-  <div class="stat-card" id="stat-agents">
-    <div class="stat-label">AGENTS <span class="dot"></span></div>
+  <div class="stat-card clickable" id="stat-agents" title="Click to expand / collapse running agents">
+    <div class="stat-label">AGENTS <span class="dot"></span> <span class="agent-caret" id="agent-caret">▾</span></div>
     <div class="stat-value" style="font-size:17px;"><span id="agent-active">0</span> RUNNING</div>
     <div class="stat-sub" id="agent-list">none</div>
   </div>
@@ -2111,11 +2447,24 @@ body::after {
 
 <!-- ============= DOCKER DOCK ============= -->
 <div class="docker-dock" id="docker-dock">
-  <div class="docker-head">
+  <div class="docker-head" id="docker-head" role="button" tabindex="0" aria-expanded="true" title="Click to collapse / expand">
+    <span class="docker-caret" id="docker-caret">▾</span>
     <span class="docker-title">&#x1F433; CONTAINERS <span class="dot" id="docker-dot"></span></span>
     <span class="docker-summary" id="docker-summary">scanning...</span>
   </div>
   <div class="docker-grid" id="docker-grid"></div>
+</div>
+
+<!-- ============= CLAUDE SUBS DOCK ============= -->
+<div class="subs-dock collapsed" id="subs-dock">
+  <div class="subs-head" id="subs-head" role="button" tabindex="0" aria-expanded="false" title="Click to expand / collapse subscriptions">
+    <span class="subs-title">&#x1F9E0; CLAUDE SUBS <span class="dot" id="subs-dot"></span></span>
+    <button class="subs-auto" id="subs-auto" type="button" title="Auto-switch the active account when it runs low on usage" aria-pressed="false">AUTO ⏻</button>
+    <span class="subs-summary" id="subs-summary">scanning...</span>
+    <span class="subs-caret" id="subs-caret">&#9662;</span>
+  </div>
+  <div class="subs-notice" id="subs-notice" hidden></div>
+  <div class="subs-body" id="subs-body"></div>
 </div>
 
 <!-- ============= PROJECTS STRIP ============= -->
@@ -2144,7 +2493,7 @@ body::after {
         <span class="config-icon">S</span>
         <span class="config-tooltip"></span>
       </span>
-      <span class="panel-project">commandcenter</span>
+      <span class="panel-project">--</span>
       <span class="git-pill" id="git-0" title="git status">--</span>
       <button class="ide-btn" data-panel="0" title="Open this project in your IDE">Open IDE</button>
       <button class="term-toggle" data-panel="0" title="Toggle bash terminal in this channel">Terminal</button>
@@ -2165,7 +2514,7 @@ body::after {
         <span class="config-icon">S</span>
         <span class="config-tooltip"></span>
       </span>
-      <span class="panel-project">aws-infra</span>
+      <span class="panel-project">--</span>
       <span class="git-pill" id="git-1" title="git status">--</span>
       <button class="ide-btn" data-panel="1" title="Open this project in your IDE">Open IDE</button>
       <button class="term-toggle" data-panel="1" title="Toggle bash terminal in this channel">Terminal</button>
@@ -2527,7 +2876,7 @@ body::after {
       fetch('/api/panel-state', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ panels: panelStateObj })
+        body: JSON.stringify({ panels: panelStateObj, panel_count: panelCount })
       }).catch(e => console.warn('saveSettings to server failed:', e));
     } catch (e) {
       console.warn('saveSettings failed:', e);
@@ -2557,14 +2906,7 @@ body::after {
   function restoreSettings(saved) {
     if (!saved) return;
     if (saved.panelCount) {
-      panelCount = saved.panelCount;
-      document.querySelectorAll('#layout-switch button').forEach(b => {
-        b.classList.toggle('on', parseInt(b.dataset.count) === panelCount);
-      });
-      mainEl.setAttribute('data-panels', panelCount);
-      document.querySelectorAll('.chat-panel').forEach((p, i) => {
-        p.setAttribute('data-hidden', i >= panelCount ? '1' : '0');
-      });
+      applyPanelCount(saved.panelCount);
     }
     if (saved.panelProject) {
       Object.assign(panelProject, saved.panelProject);
@@ -3298,19 +3640,26 @@ body::after {
   // Layout switcher (1, 2, 3 panels)
   let panelCount = 2;
   const mainEl = document.querySelector('.main');
+
+  // Apply a channel count to the layout: update buttons, grid, panel visibility.
+  // Used both by the click handler and when restoring saved state on boot.
+  function applyPanelCount(count) {
+    panelCount = count;
+    document.querySelectorAll('#layout-switch button').forEach(b => {
+      b.classList.toggle('on', parseInt(b.dataset.count) === count);
+    });
+    mainEl.setAttribute('data-panels', count);
+    document.querySelectorAll('.chat-panel').forEach((p, i) => {
+      p.setAttribute('data-hidden', i >= count ? '1' : '0');
+    });
+  }
+
   document.getElementById('layout-switch').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
     const count = parseInt(btn.dataset.count);
     if (count === panelCount) return;
-    panelCount = count;
-    document.querySelectorAll('#layout-switch button').forEach(b => b.classList.remove('on'));
-    btn.classList.add('on');
-    mainEl.setAttribute('data-panels', count);
-    // Show/hide panels
-    document.querySelectorAll('.chat-panel').forEach((p, i) => {
-      p.setAttribute('data-hidden', i >= count ? '1' : '0');
-    });
+    applyPanelCount(count);
     // Assign projects to newly visible panels and open terminals
     for (let i = 0; i < count; i++) {
       if (!panelProject[i] && PROJECT_LIST[i]) {
@@ -3358,9 +3707,15 @@ body::after {
       
       // Fetch server panel state FIRST - this is source of truth
       try {
-        const serverState = await fetch('/api/panel-state').then(r => r.json());
-        if (serverState && Object.keys(serverState).length > 0) {
+        const serverResp = await fetch('/api/panel-state').then(r => r.json());
+        // Response shape: { panels: { "0": {project, agent}, ... }, panel_count }
+        const serverState = (serverResp && serverResp.panels) || {};
+        const serverCount = serverResp && serverResp.panel_count;
+        if (Object.keys(serverState).length > 0) {
           // Server has state - use it
+          if (typeof serverCount === 'number' && serverCount >= 1 && serverCount <= 3) {
+            applyPanelCount(serverCount);
+          }
           for (const [panelStr, data] of Object.entries(serverState)) {
             const panel = parseInt(panelStr);
             if (panel >= 0 && panel < 3 && data.project) {
@@ -3821,6 +4176,19 @@ body::after {
   /* ===== RUNNING AGENTS ===== */
   socket.on('agents_update', (data) => renderAgents(data));
 
+  // AGENTS card: click to expand / collapse the running-session list. The
+  // dot list (blue = claude, etc.) hides entirely when collapsed.
+  (function () {
+    const card = document.getElementById('stat-agents');
+    if (!card) return;
+    const KEY = 'cc-agents-collapsed';
+    if (localStorage.getItem(KEY) === '1') card.classList.add('collapsed');
+    card.addEventListener('click', () => {
+      const collapsed = card.classList.toggle('collapsed');
+      try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {}
+    });
+  })();
+
   function renderAgents(data) {
     const card = document.getElementById('stat-agents');
     if (!card) return;
@@ -3906,6 +4274,30 @@ body::after {
     });
   }
 
+  // Collapsible containers dock. Header toggles the grid; state persists.
+  (function () {
+    const dock = document.getElementById('docker-dock');
+    const head = document.getElementById('docker-head');
+    if (!dock || !head) return;
+    const KEY = 'cc-docker-collapsed';
+
+    function apply(collapsed) {
+      dock.classList.toggle('collapsed', collapsed);
+      head.setAttribute('aria-expanded', String(!collapsed));
+    }
+    apply(localStorage.getItem(KEY) === '1');
+
+    function toggle() {
+      const collapsed = !dock.classList.contains('collapsed');
+      apply(collapsed);
+      try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {}
+    }
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+  })();
+
   // Open container port links via the server so they pop in the real default
   // browser even when the dashboard is running full-screen (a plain _blank tab
   // would open hidden behind the kiosk window). Delegated so it survives the
@@ -3937,6 +4329,281 @@ body::after {
       setTimeout(() => link.classList.remove('opening'), 600);
     });
   });
+
+  /* ===== CLAUDE SUBS DOCK ===== */
+  // Renders saved Claude subscriptions in a full-width collapsible card.
+  // Green/red dot per sub (OK vs rate-limited), live countdown to reset when
+  // expanded, and click-to-switch the active Claude Code account.
+  (function () {
+    const dock = document.getElementById('subs-dock');
+    const head = document.getElementById('subs-head');
+    const body = document.getElementById('subs-body');
+    const dot = document.getElementById('subs-dot');
+    const summary = document.getElementById('subs-summary');
+    if (!dock || !head || !body) return;
+
+    const COLLAPSE_KEY = 'cc-subs-collapsed';
+    // Remember the user's expand/collapse choice (defaults to collapsed).
+    if (localStorage.getItem(COLLAPSE_KEY) === '0') dock.classList.remove('collapsed');
+    else dock.classList.add('collapsed');
+    head.setAttribute('aria-expanded', String(!dock.classList.contains('collapsed')));
+
+    function toggle() {
+      const collapsed = dock.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', String(!collapsed));
+      try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (_) {}
+    }
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+
+    // ---- AUTO toggle: switch the active account automatically when it's low.
+    const autoBtn = document.getElementById('subs-auto');
+    const notice = document.getElementById('subs-notice');
+
+    function setAutoUI(on) {
+      autoBtn.classList.toggle('on', on);
+      autoBtn.setAttribute('aria-pressed', String(on));
+      autoBtn.textContent = on ? 'AUTO ✓' : 'AUTO ⏻';
+    }
+    // Load persisted state.
+    fetch('/api/claude-subs/autoswitch')
+      .then(r => r.json()).then(d => setAutoUI(!!d.enabled)).catch(() => {});
+
+    autoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();  // don't collapse/expand the dock
+      const turningOn = !autoBtn.classList.contains('on');
+      // Turning on is the moment to ask for notification permission (a user
+      // gesture is required by the browser).
+      if (turningOn && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+      fetch('/api/claude-subs/autoswitch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: turningOn }),
+      }).then(r => r.json()).then(d => setAutoUI(!!d.enabled)).catch(() => {});
+    });
+
+    function showNotice(kind, html) {
+      notice.className = 'subs-notice ' + kind;
+      notice.innerHTML = html;
+      notice.hidden = false;
+    }
+    function clearNotice() { notice.hidden = true; notice.innerHTML = ''; }
+
+    // Fire a real browser/OS notification (best-effort; needs permission).
+    function browserNotify(title, body) {
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(title, { body, tag: 'cc-claude-subs' });
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    // React to auto-switch engine events from the server.
+    socket.on('claude_subs_auto', (ev) => {
+      if (!ev || !ev.action) return;
+      if (ev.action === 'switched') {
+        showNotice('switched', `&#x1F501; Auto-switched <b>${escapeHtml(ev.from || '?')}</b> → <b>${escapeHtml(ev.to)}</b> (${escapeHtml(ev.reason || '')})`);
+        setTimeout(() => { if (notice.classList.contains('switched')) clearNotice(); }, 8000);
+      } else if (ev.action === 'waiting') {
+        // No account available — leave a persistent notice; user starts manually.
+        showNotice('wait', `&#x26D4; All Claude subs are exhausted — none available right now. You'll be notified when one is ready.`);
+        browserNotify('Claude subs exhausted', 'No subscription available — waiting for one to reset.');
+      } else if (ev.action === 'ready') {
+        const names = (ev.names || []).join(', ');
+        showNotice('ready', `&#x2705; Ready to use: <b>${escapeHtml(names)}</b> — start it when you want.`);
+        browserNotify('Claude sub ready', `${names} is available again.`);
+      }
+    });
+
+    function fmtCountdown(epochSeconds) {
+      if (!epochSeconds) return '';
+      let s = Math.floor(epochSeconds - Date.now() / 1000);
+      if (s <= 0) return 'now';
+      const d = Math.floor(s / 86400); s -= d * 86400;
+      const h = Math.floor(s / 3600); s -= h * 3600;
+      const m = Math.floor(s / 60); s -= m * 60;
+      if (d) return `${d}d ${h}h ${m}m`;
+      if (h) return `${h}h ${m}m ${String(s).padStart(2, '0')}s`;
+      if (m) return `${m}m ${String(s).padStart(2, '0')}s`;
+      return `${s}s`;
+    }
+
+    function utilClass(u) {
+      if (u == null) return '';
+      if (u >= 0.9) return 'crit';
+      if (u >= 0.6) return 'warn';
+      return '';
+    }
+
+    function switchAccount(name, card) {
+      if (card.dataset.busy === '1') return;
+      card.dataset.busy = '1';
+      const hint = card.querySelector('.subs-switch-hint');
+      if (hint) hint.textContent = 'switching…';
+      fetch('/api/claude-subs/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      }).then(r => r.json()).then(res => {
+        if (hint) hint.textContent = res.ok ? 'switched ✓' : 'failed';
+        // User activated a sub — the "ready to use" / "waiting" banner has
+        // served its purpose, so dismiss it.
+        if (res.ok) clearNotice();
+      }).catch(() => {
+        if (hint) hint.textContent = 'failed';
+      }).finally(() => {
+        setTimeout(() => { card.dataset.busy = '0'; }, 1500);
+      });
+    }
+
+    function render(data) {
+      if (!data || data.available === false) {
+        dot.className = 'dot off';
+        summary.textContent = (data && data.reason) ? data.reason : 'cc-acct unavailable';
+        body.innerHTML = '<div class="subs-empty">cc-acct not available.</div>';
+        return;
+      }
+      const accounts = data.accounts || [];
+      if (!accounts.length) {
+        dot.className = 'dot off';
+        summary.textContent = 'no saved accounts';
+        body.innerHTML = '<div class="subs-empty">No saved accounts. Run: cc-acct save &lt;name&gt;</div>';
+        return;
+      }
+
+      const limitedAccts = accounts.filter(a => a.state === 'limited');
+      const limited = limitedAccts.length;
+      const errored = accounts.filter(a => a.state === 'error').length;
+      dot.className = 'dot' + (limited ? ' err' : (errored ? ' warn' : ''));
+      const okCount = accounts.length - limited - errored;
+
+      // Soonest "OK again" among the rate-limited subs → a live countdown
+      // right in the collapsed header, next to the ready count, so you can see
+      // when usage frees up without expanding the dock.
+      const soonest = limitedAccts
+        .filter(a => a.ok_again)
+        .sort((a, b) => a.ok_again - b.ok_again)[0];
+
+      let summaryHtml = `${okCount}/${accounts.length} ready`;
+      if (limited) summaryHtml += ` · ${limited} limited`;
+      if (soonest) {
+        summaryHtml += ` · <span class="subs-summary-wait">&#9203; ${escapeHtml(soonest.name)} ready in ` +
+          `<span class="subs-reset limited" data-reset="${soonest.ok_again}">…</span></span>`;
+      }
+      summary.innerHTML = summaryHtml;
+
+      body.innerHTML = '';
+      accounts.forEach(a => {
+        const card = document.createElement('div');
+        const state = a.state || 'unknown';
+        card.className = 'subs-card ' + state + (a.active ? ' active' : '');
+        card.dataset.name = a.name;
+
+        const tag = a.active
+          ? '<span class="subs-active-tag">● active</span>'
+          : '<span class="subs-switch-hint">click to switch</span>';
+
+        let windowsHtml = '';
+        if (a.windows && Object.keys(a.windows).length) {
+          windowsHtml = '<div class="subs-windows">' + ['5h', '7d'].map(w => {
+            const win = a.windows[w];
+            if (!win) return '';
+            const util = win.utilization;
+            const pct = util != null ? Math.round(util * 100) : null;
+            const rejected = win.status === 'rejected';
+            if (rejected) {
+              // Rate-limited: bar depletes toward reset, text counts down.
+              return `
+                <div class="subs-window">
+                  <span class="subs-win-label">${escapeHtml(win.label)}</span>
+                  <span class="subs-bar"><span class="subs-bar-fill crit" data-reset="${win.reset || ''}" data-window="${w}"></span></span>
+                  <span class="subs-reset limited" data-reset="${win.reset || ''}">…</span>
+                </div>`;
+            }
+            // Healthy: bar shows usage done, text shows the percentage plus a
+            // live countdown to when this window resets (the rolling 5h/7d
+            // clock that started on first use — visible even while "allowed").
+            const fillW = pct != null ? Math.min(100, pct) : 0;
+            const resetHtml = win.reset
+              ? ` · <span class="subs-reset-in" data-reset="${win.reset}">…</span>`
+              : '';
+            return `
+              <div class="subs-window">
+                <span class="subs-win-label">${escapeHtml(win.label)}</span>
+                <span class="subs-bar"><span class="subs-bar-fill ${utilClass(util)}" style="width:${fillW}%"></span></span>
+                <span class="subs-reset">${pct != null ? pct + '% used' : '?'}${resetHtml}</span>
+              </div>`;
+          }).join('') + '</div>';
+        } else if (a.error) {
+          windowsHtml = `<div class="subs-error">${escapeHtml(a.error)}</div>`;
+        } else {
+          windowsHtml = '<div class="subs-error" style="color:var(--text-dim)">probing usage…</div>';
+        }
+
+        const okAgainHtml = (a.state === 'limited' && a.ok_again)
+          ? `<div class="subs-token" style="color:var(--red)">⛔ OK again in <span data-reset="${a.ok_again}" class="subs-reset limited">…</span></div>`
+          : '';
+
+        const tokenHtml = a.token_expires
+          ? `<div class="subs-token">token valid <span data-reset="${a.token_expires}">…</span> · auto-refreshes</div>`
+          : '';
+
+        card.innerHTML = `
+          <div class="subs-card-top">
+            <span class="subs-state-dot ${state}"></span>
+            <span class="subs-name">${escapeHtml(a.name)}</span>
+            <span class="subs-plan">${escapeHtml(a.plan || '?')}</span>
+            ${tag}
+          </div>
+          <div class="subs-meta" title="${escapeHtml(a.email)} · ${escapeHtml(a.org)}">${escapeHtml(a.email)} · ${escapeHtml(a.org)}</div>
+          ${windowsHtml}
+          ${okAgainHtml}
+          ${tokenHtml}
+        `;
+
+        if (!a.active) {
+          card.addEventListener('click', () => switchAccount(a.name, card));
+        }
+        body.appendChild(card);
+      });
+      tickCountdowns();
+    }
+
+    // How long each rate-limit window spans, in seconds. Used to size the
+    // visual countdown bar (fraction of the window still remaining).
+    const WINDOW_SECS = { '5h': 5 * 3600, '7d': 7 * 86400 };
+
+    // Live countdowns: once a second, rewrite the remaining-time text and
+    // deplete each countdown bar, all from stored epochs (no re-render).
+    function tickCountdowns() {
+      const now = Date.now() / 1000;
+      // Include the header summary so the collapsed "ready in …" ticks too.
+      document.querySelectorAll('#subs-body .subs-reset[data-reset], #subs-summary .subs-reset[data-reset]').forEach(el => {
+        const epoch = parseFloat(el.getAttribute('data-reset'));
+        el.textContent = epoch ? fmtCountdown(epoch) : '—';
+      });
+      // Healthy windows: show "resets in <countdown>" so the rolling 5h/7d
+      // clock is visible even when the account is still allowed.
+      document.querySelectorAll('#subs-body .subs-reset-in[data-reset]').forEach(el => {
+        const epoch = parseFloat(el.getAttribute('data-reset'));
+        el.textContent = epoch ? 'resets ' + fmtCountdown(epoch) : '';
+      });
+      document.querySelectorAll('#subs-body .subs-bar-fill[data-reset]').forEach(el => {
+        const epoch = parseFloat(el.getAttribute('data-reset'));
+        const total = WINDOW_SECS[el.getAttribute('data-window')] || 18000;
+        if (!epoch) { el.style.width = '0%'; return; }
+        const left = Math.max(0, Math.min(total, epoch - now));
+        el.style.width = (left / total * 100).toFixed(1) + '%';
+      });
+    }
+    setInterval(tickCountdowns, 1000);
+
+    socket.on('claude_subs_update', render);
+  })();
 
   /* ===== EVENT LOG ===== */
   const EVENT_ICONS = { TOOL: '\u{1F527}', THINK: '\u{1F9E0}', ERROR: '⚠', INFO: 'ℹ' };

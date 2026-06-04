@@ -13,6 +13,6 @@ config/projects.json.backup
 .superpowers/
 
 # Local commandcenter settings (auto-created, not tracked)
-.claude/commandcenter_settings.json
+config/settings.json
 .claude/settings.bedrock-backup.json
 .claude/settings.anthropic-backup.json

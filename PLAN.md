@@ -31,7 +31,7 @@ terminals from one browser window.
    Codex**; switching project/agent kills that panel's old session and spawns
    the chosen one. The previous session stays alive in the background.
 5. **Persistence** — Panel layout/state is saved to
-   `~/.claude/commandcenter_settings.json` and is the source of truth on
+   `config/settings.json` and is the source of truth on
    refresh; running agents survive tab close via their tmux sessions.
 6. **Self-cleaning** — The idle janitor reaps never-used `cc-*` sessions after
    10 min (toggle with `auto_close_idle`) so stale sessions don't accumulate.
@@ -87,8 +87,8 @@ terminals from one browser window.
 
 ### Panel State Persistence
 
-Panel state (which project/agent per panel) is:
-1. Saved on every agent switch to `~/.claude/commandcenter_settings.json`
+Panel state (which project/agent per panel, plus the channel count) is:
+1. Saved on every agent/layout change to `config/settings.json`
 2. Loaded on page refresh from server (source of truth)
 3. Synced with tmux session names for persistence
 

@@ -9,6 +9,8 @@ A mission-control dashboard for managing multiple AI coding agents side-by-side.
 - **Multi-Panel Terminals** — Run 1-3 AI agents simultaneously in real xterm.js terminals
 - **Agent Switching** — Cycle between Claude, OpenCode, and Codex per panel with one click
 - **Tmux Persistence** — Sessions survive browser refresh; instant resume when you return
+- **Image Paste** — Ctrl+V a screenshot straight into an agent; saved to the project and the path is auto-typed
+- **Open IDE** — One click opens a channel's project in your editor; auto-detects the IDE you're running (Kiro, VS Code, Cursor, Zed, Sublime, JetBrains, and more)
 - **Live System Metrics** — CPU, RAM, disk, and network monitoring with sparkline graphs
 - **Git Status** — Real-time branch name and dirty state indicators per project
 - **Project Management** — Add/remove projects via file browser, switch projects per panel
@@ -106,12 +108,15 @@ The `projects.json` file is gitignored — your private project settings are nev
 ### Settings File
 
 Runtime settings (panel layout, auto-cleanup toggle) are stored in
-`~/.claude/commandcenter_settings.json`:
+`config/settings.json` (inside the project, auto-created, git-ignored):
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `auto_close_idle` | `true` | Auto-reap never-used agent sessions (see below) |
 | `panels` | `{}` | Saved per-panel project/agent state |
+| `panel_count` | `2` | Number of visible channels (1–3); restored on reload |
+| `ide` | `auto` | Editor for the "Open IDE" button (`auto` = detect, a known key, or `custom`) |
+| `ide_custom` | `""` | Launcher command used when `ide` is `custom` |
 
 ### Idle Session Auto-Cleanup
 
@@ -148,6 +153,43 @@ Each panel shows an indicator for the active config:
 - **B** = Bedrock mode (AWS)
 
 **Hover over the indicator** to see the logged-in user email for subscription mode.
+
+### Pasting Images
+
+Browser terminals can't pipe clipboard image data through to an agent, so
+CommandCenter intercepts the paste for you:
+
+1. Copy any image to your clipboard (screenshot, copied image file, etc.)
+2. Click into a terminal panel and press **Ctrl+V** (or **Cmd+V** on macOS)
+3. The image is uploaded, saved to the project's `.cc_pastes/` folder, and the
+   file path is typed into the prompt automatically
+
+The agent (e.g. Claude) then reads it as a normal file reference. When no
+project is bound to the panel, images are saved to
+`~/.claude/commandcenter_pastes/` and the absolute path is inserted instead.
+
+> Plain-text paste is unaffected — only clipboard **images** are intercepted.
+> Add `.cc_pastes/` to your project's `.gitignore` if you don't want pasted
+> screenshots tracked.
+
+### Open IDE
+
+Each channel header has an **Open IDE** button that opens that panel's project
+folder in your editor.
+
+CommandCenter scans for all known IDEs installed on your machine — Kiro, VS Code
+(+ Insiders), VSCodium, Cursor, Windsurf, Zed, Sublime Text, JetBrains IDEs
+(IDEA, PyCharm, WebStorm, PhpStorm, RubyMine, GoLand, Rider, CLion, DataGrip,
+Fleet), Android Studio, Lapce, Neovide, GVim, Emacs, GNOME Builder, Kate, Geany,
+Pulsar, Eclipse, and NetBeans. Out of the box it **auto-detects the IDE you're
+currently running** and uses that.
+
+To pin a specific editor, open **Settings (⚙)** → **IDE** and pick one from the
+dropdown. Using something not on the list? Choose **Custom command…** and enter
+your editor's launcher (e.g. `nvim-qt`, `lapce`, or an absolute path); it's run
+as `<command> <project-path>`. The choice is saved to
+`config/settings.json` under the `ide` key (`auto` = detect,
+`custom` = use `ide_custom`).
 
 ### Tmux Copy Mode
 
@@ -276,14 +318,15 @@ Use behind a VPN or add your own authentication layer.
 - The idle janitor reaps `cc-*` sessions that are >10 min old and never used
   (still on a sign-in/welcome prompt). Sessions bound to an open panel are safe.
 - To keep all sessions, set `auto_close_idle` to `false` in
-  `~/.claude/commandcenter_settings.json`. See [Idle Session Auto-Cleanup](#idle-session-auto-cleanup).
+  `config/settings.json`. See [Idle Session Auto-Cleanup](#idle-session-auto-cleanup).
 
 ### Copy mode not working
 - Install xclip: `sudo apt install xclip` (or `brew install xclip` on macOS)
 - Verify: `xclip --version`
 
 ### Panel state not persisting after refresh
-- Server is source of truth — panel state is saved to `~/.claude/commandcenter_settings.json`
+- Server is source of truth — panel state (projects, agents, and channel count)
+  is saved to `config/settings.json`
 - If server restarts, state is reloaded from tmux sessions
 
 ### "subscription mode" shown instead of email

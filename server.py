@@ -27,6 +27,7 @@ from services.system import SystemService
 from services.weather import WeatherService
 from services.git import GitService
 from services.docker import DockerService
+from services.claude_subs import ClaudeSubsService
 
 # ============================================================================
 # LOGGING SETUP - Structured logging instead of print() statements
@@ -110,6 +111,7 @@ system_service = SystemService()
 weather_service = WeatherService(os.environ.get("CC_WEATHER_CITY", "Copenhagen"))
 git_service = GitService()
 docker_service = DockerService()
+claude_subs_service = ClaudeSubsService()
 
 # Per-panel state -----------------------------------------------------------
 # sid -> { panel_id: {bridge, project, agent} }
@@ -199,22 +201,25 @@ def rate_limit():
         return wrapper
     return decorator
 
+# Runtime settings live inside the project so they travel with the repo and
+# are easy to find, instead of being buried in ~/.claude.
+CC_SETTINGS_FILE = Path(__file__).resolve().parent / "config" / "settings.json"
+
 def _load_cc_settings():
-    """Load commandcenter settings from disk"""
-    settings_file = Path.home() / ".claude" / "commandcenter_settings.json"
+    """Load commandcenter settings from the project config folder."""
     try:
-        if settings_file.exists():
-            with open(settings_file) as f:
+        if CC_SETTINGS_FILE.exists():
+            with open(CC_SETTINGS_FILE) as f:
                 return json.load(f)
     except Exception:
         pass
     return {"auto_close_idle": True, "panels": {}}
 
 def _save_settings(data):
-    """Save commandcenter settings to disk"""
-    settings_file = Path.home() / ".claude" / "commandcenter_settings.json"
+    """Save commandcenter settings to the project config folder."""
     try:
-        with open(settings_file, "w") as f:
+        CC_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CC_SETTINGS_FILE, "w") as f:
             json.dump(data, f, indent=2)
     except Exception as e:
         logger.error(f"Failed to save settings: {e}")
@@ -800,6 +805,58 @@ def api_docker():
     return jsonify(docker_service.get_containers())
 
 
+@app.route("/api/claude-subs")
+@rate_limit()
+def api_claude_subs():
+    """Live status of saved Claude Code subscriptions (usage + reset times)."""
+    probe = request.args.get("probe", "1") != "0"
+    return jsonify(claude_subs_service.get_status(probe=probe))
+
+
+@app.route("/api/claude-subs/switch", methods=["POST"])
+@rate_limit()
+def api_claude_subs_switch():
+    """Switch the active Claude Code account to the given saved profile."""
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "name required"}), 400
+    result = claude_subs_service.switch(name)
+    status = 200 if result.get("ok") else 400
+    if result.get("ok"):
+        emit_event("INFO", f"switched Claude account → {name}")
+        # Move the "active" marker immediately WITHOUT blanking the cards: reuse
+        # the last-known usage colours/windows and just recompute active flags.
+        try:
+            socketio.emit("claude_subs_update", claude_subs_service.refresh_active_flags())
+        except Exception:
+            pass
+        # Then refresh real usage in the background so colours stay accurate
+        # (a full probe is slow; don't block the HTTP response on it).
+        def _reprobe():
+            try:
+                socketio.emit("claude_subs_update", claude_subs_service.get_status(probe=True))
+            except Exception as exc:
+                logger.warning(f"post-switch reprobe failed: {exc}")
+        socketio.start_background_task(_reprobe)
+    return jsonify(result), status
+
+
+@app.route("/api/claude-subs/autoswitch", methods=["GET", "POST"])
+@rate_limit()
+def api_claude_subs_autoswitch():
+    """Get or set the auto-switch-on-low-usage toggle (persisted in settings)."""
+    settings = _load_cc_settings()
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        enabled = bool(data.get("enabled"))
+        settings["claude_autoswitch"] = enabled
+        _save_settings(settings)
+        logger.info(f"Claude auto-switch set to {enabled}")
+        return jsonify({"ok": True, "enabled": enabled})
+    return jsonify({"enabled": bool(settings.get("claude_autoswitch", False))})
+
+
 @app.route("/api/agents")
 @rate_limit()
 def api_agents():
@@ -823,20 +880,30 @@ def api_projects():
 @app.route("/api/panel-state")
 def api_panel_state():
     settings = _load_cc_settings()
-    return jsonify(settings.get("panels", {}))
+    return jsonify({
+        "panels": settings.get("panels", {}),
+        "panel_count": settings.get("panel_count"),
+    })
 
 
 @app.route("/api/panel-state", methods=["PUT"])
 def api_save_panel_state():
     data = request.get_json(force=True) or {}
-    # data should be { "panels": { "0": {"project": "...", "agent": "..."}, ... } }
+    # data should be {
+    #   "panels": { "0": {"project": "...", "agent": "..."}, ... },
+    #   "panel_count": 1|2|3
+    # }
     panels_data = data.get("panels", {})
     if not isinstance(panels_data, dict):
         return jsonify({"error": "invalid panels data"}), 400
     settings = _load_cc_settings()
     settings["panels"] = panels_data
+    # Persist the chosen channel count so the layout survives a reload.
+    panel_count = data.get("panel_count")
+    if isinstance(panel_count, int) and 1 <= panel_count <= 3:
+        settings["panel_count"] = panel_count
     _save_settings(settings)
-    logger.info(f"Saved panel state: {panels_data}")
+    logger.info(f"Saved panel state: {panels_data} (count={settings.get('panel_count')})")
     return jsonify({"ok": True})
 
 
@@ -1257,6 +1324,71 @@ def agents_thread():
         gevent.sleep(5)
 
 
+def claude_subs_thread():
+    """Keeps Claude subscriptions alive and feeds the dashboard.
+
+    Cadences:
+      * every 10 sec — probe ONLY the active account (its usage is the only one
+        actually moving) and broadcast. Near-live usage without hammering the
+        idle accounts.
+      * every 1 min  — full usage probe of ALL accounts (so any account you've
+        used recently is fresh the moment you switch to it).
+      * every 5 min  — cheap TOKEN keep-alive (no usage call): proactively
+        refreshes non-active tokens before they expire and mirrors the active
+        account from Claude Code. Guarantees the subs never run out.
+    """
+    logger.info("THREAD_START: claude_subs_thread")
+    if not claude_subs_service.is_available():
+        logger.info("claude_subs_thread: cc-acct not found, thread idling")
+        return
+
+    ACTIVE_INTERVAL = 10
+    FULL_INTERVAL = 60
+    KEEPALIVE_INTERVAL = 300
+    last_keepalive = 0.0
+    last_full = 0.0
+    while True:
+        try:
+            now = time.time()
+            # Token maintenance on its own slow clock — cheap and safe.
+            if now - last_keepalive >= KEEPALIVE_INTERVAL:
+                touched = claude_subs_service.keep_alive_all()
+                last_keepalive = now
+                if touched:
+                    logger.info(f"claude_subs_thread: kept {touched} token(s) fresh")
+
+            if now - last_full >= FULL_INTERVAL:
+                # Full sweep of every account.
+                payload = claude_subs_service.get_status(probe=True)
+                last_full = now
+            else:
+                # Fast path: refresh just the active account.
+                payload = claude_subs_service.probe_active()
+            socketio.emit("claude_subs_update", payload)
+
+            # Auto-switch evaluation runs every cycle on the fresh cache. It may
+            # switch accounts (when enabled + a candidate is free), flag that no
+            # candidate is available, or announce that one became ready.
+            try:
+                enabled = bool(_load_cc_settings().get("claude_autoswitch", False))
+                event = claude_subs_service.evaluate_autoswitch(enabled)
+                if event:
+                    socketio.emit("claude_subs_auto", event)
+                    if event["action"] == "switched":
+                        emit_event("INFO", f"auto-switched {event['from']} → {event['to']} ({event['reason']})")
+                        # Push refreshed status so the active marker moves.
+                        socketio.emit("claude_subs_update", claude_subs_service.refresh_active_flags())
+                    elif event["action"] == "waiting":
+                        emit_event("WARN", f"Claude subs exhausted — none available (was {event['from']})")
+                    elif event["action"] == "ready":
+                        emit_event("INFO", f"Claude sub ready: {', '.join(event['names'])}")
+            except Exception as exc:
+                logger.warning(f"autoswitch eval error: {exc}")
+        except Exception as exc:
+            logger.warning(f"claude_subs_thread error: {exc}")
+        gevent.sleep(ACTIVE_INTERVAL)
+
+
 # Fingerprints that mean an agent pane is still on its first-launch / login
 # screen — never typed in, never authed. Combined with idle time + the "not
 # currently bound to a visible panel" check, these mark sessions safe to kill.
@@ -1402,6 +1534,12 @@ def handle_connect():
         socketio.emit("agents_update", get_running_agents(), to=request.sid)
     except Exception as e:
         logger.warning(f"socket agents on connect failed: {e}")
+    # Send last-known Claude subscription snapshot immediately (no network probe
+    # — the background thread refreshes the live data on its own cadence).
+    try:
+        socketio.emit("claude_subs_update", claude_subs_service.get_cached(), to=request.sid)
+    except Exception as e:
+        logger.warning(f"socket claude-subs on connect failed: {e}")
 
 
 @socketio.on("disconnect")
@@ -1776,6 +1914,8 @@ if __name__ == "__main__":
     logger.info("  -> docker_thread started")
     socketio.start_background_task(agents_thread)
     logger.info("  -> agents_thread started")
+    socketio.start_background_task(claude_subs_thread)
+    logger.info("  -> claude_subs_thread started")
     socketio.start_background_task(git_thread)
     logger.info("  -> git_thread started")
     socketio.start_background_task(tmux_janitor)

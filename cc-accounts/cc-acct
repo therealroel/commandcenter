@@ -1,0 +1,618 @@
+#!/usr/bin/env python3
+"""cc-acct - manage multiple Claude Code accounts and see when usage resets.
+
+Snapshots each account's OAuth tokens + identity into ~/.claude-accounts/<name>.json
+(mode 0600, OUTSIDE this git repo), lets you switch the active account, and probes
+Anthropic's API to report rate-limit reset times - the "when is my usage OK again"
+question across all your subscriptions.
+
+Run manually:
+  cc-acct save <name>        Snapshot the CURRENT logged-in account as <name>
+  cc-acct list               List saved accounts (* = active)
+  cc-acct whoami             Show which account is active right now
+  cc-acct status [name]      Rate-limit / reset status for all (or one)
+  cc-acct switch <name>      Make <name> the active account
+  cc-acct refresh <name>     Force an OAuth token refresh for <name>
+  cc-acct rm <name>          Delete a saved account
+
+Workflow for your 3 subs:
+  1) /login to account A in Claude Code, then:  cc-acct save work
+  2) /login to account B, then:                 cc-acct save personal
+  3) /login to account C, then:                 cc-acct save third
+  4) anytime:                                    cc-acct status
+
+Features:
+  - Distinguishes accounts by organization name (e.g. two logins on the same
+    email but different orgs show up separately in `list` / `whoami` / `status`).
+  - `status` reports both the 5-hour and weekly rate-limit windows, with the
+    exact reset time and "OK again at ..." for any account that is limited.
+  - Active account is detected by token identity, not email, so duplicate-email
+    accounts resolve to the correct profile.
+  - `status` self-heals a stale-but-not-expired token: on a 401 it forces one
+    refresh + retry, and tells you to re-login if the refresh token is dead.
+
+Token lifetimes:
+  - Access token: ~8 hours (Anthropic returns expires_in = 28800s).
+  - Refresh token: long-lived but SINGLE-USE. Each refresh issues a new refresh
+    token and invalidates the old one. status/switch/refresh persist the rotated
+    token back to ~/.claude-accounts/<name>.json so the chain survives.
+
+Notes:
+  - Tokens live in ~/.claude-accounts/ (mode 0600), never in this repo.
+  - `switch` backs up current credentials first. Restart Claude Code afterwards.
+  - status/switch auto-refresh tokens near expiry; `refresh <name>` forces it.
+  - CAUTION: do NOT `refresh` the account that is currently active in Claude
+    Code. Claude Code also refreshes that account's token, and whichever side
+    refreshes second invalidates the other's copy (-> invalid_grant, forces a
+    re-login). Let Claude Code manage the active account; just re-run
+    `cc-acct save <name>` after a /login to capture its latest token. Use the
+    script freely on the OTHER (non-active) accounts.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import socket
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+HOME = Path.home()
+CLAUDE_DIR = HOME / ".claude"
+CRED_FILE = CLAUDE_DIR / ".credentials.json"
+CLAUDE_JSON = HOME / ".claude.json"
+STORE = HOME / ".claude-accounts"
+BACKUP_DIR = STORE / "backups"
+
+# Claude Code public OAuth client id + endpoints (same values the CLI uses).
+CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+TOKEN_URL = "https://console.anthropic.com/v1/oauth/token"
+MESSAGES_URL = "https://api.anthropic.com/v1/messages"
+CLI_UA = "claude-cli/2.1.161 (external, cli)"
+OAUTH_BETA = "oauth-2025-04-20"
+CC_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
+
+PROBE_MODELS = [
+    os.environ.get("CC_ACCT_PROBE_MODEL", "claude-haiku-4-5-20251001"),
+    "claude-sonnet-4-5-20250929",
+]
+
+
+def die(msg: str, code: int = 1):
+    print(f"error: {msg}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def _is_transient_dns_error(exc: urllib.error.URLError) -> bool:
+    """True for retryable name-resolution blips (gevent's resolver + EAI_AGAIN).
+
+    Under gevent's monkey-patched threadpool resolver, a burst of concurrent
+    lookups (e.g. probing every saved account at once on a dashboard reload)
+    can momentarily fail with ``[Errno -3] Temporary failure in name
+    resolution`` (EAI_AGAIN) even though DNS is perfectly healthy. These are
+    "try again" errors, not real outages, so we retry instead of surfacing them.
+    """
+    reason = getattr(exc, "reason", exc)
+    if isinstance(reason, socket.gaierror):
+        # EAI_AGAIN is the canonical transient resolver failure. errno is the
+        # negative getaddrinfo code; -3 == EAI_AGAIN on glibc.
+        if reason.errno in (socket.EAI_AGAIN, -3):
+            return True
+        # Some platforms only populate the message string.
+        if "temporary failure in name resolution" in str(reason).lower():
+            return True
+    return False
+
+
+def urlopen_retry(req, *, timeout: int = 30, attempts: int = 3, backoff: float = 0.5):
+    """``urllib.request.urlopen`` that retries transient DNS failures.
+
+    HTTPErrors (4xx/5xx) are NOT retried here — callers handle those by status
+    code. Only transient name-resolution blips are retried, with a short
+    backoff between attempts.
+    """
+    last_exc = None
+    for attempt in range(attempts):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError:
+            raise  # real HTTP response — let the caller inspect the status
+        except urllib.error.URLError as exc:
+            last_exc = exc
+            if attempt < attempts - 1 and _is_transient_dns_error(exc):
+                time.sleep(backoff * (attempt + 1))
+                continue
+            raise
+    raise last_exc  # pragma: no cover (loop always returns or raises)
+
+
+def ensure_store() -> None:
+    STORE.mkdir(mode=0o700, exist_ok=True)
+    BACKUP_DIR.mkdir(mode=0o700, exist_ok=True)
+    try:
+        STORE.chmod(0o700)
+    except OSError:
+        pass
+
+
+def read_json(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def write_json_secure(path: Path, data: dict) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+    tmp.chmod(0o600)
+    tmp.replace(path)
+
+
+def profile_path(name: str) -> Path:
+    if not name or "/" in name or name.startswith("."):
+        die(f"invalid account name: {name!r}")
+    return STORE / f"{name}.json"
+
+
+def load_profile(name: str) -> dict:
+    p = profile_path(name)
+    if not p.exists():
+        die(f"no saved account named {name!r} (try: cc-acct list)")
+    return read_json(p)
+
+
+def list_profiles() -> list[str]:
+    if not STORE.exists():
+        return []
+    return sorted(p.stem for p in STORE.glob("*.json"))
+
+
+def mask(token: str) -> str:
+    if not token:
+        return "(none)"
+    return f"{token[:8]}\u2026{token[-4:]} ({len(token)} chars)"
+
+
+def fmt_ts(epoch_seconds: float) -> str:
+    return datetime.fromtimestamp(epoch_seconds).astimezone().strftime(
+        "%Y-%m-%d %H:%M:%S %Z"
+    )
+
+
+def human_delta(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds <= 0:
+        return "now"
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+def read_current_oauth() -> dict:
+    if not CRED_FILE.exists():
+        die(f"{CRED_FILE} not found - is Claude Code logged in?")
+    oauth = read_json(CRED_FILE).get("claudeAiOauth")
+    if not oauth or "accessToken" not in oauth:
+        die("no claudeAiOauth block in credentials - log in with Claude Code first")
+    return oauth
+
+
+def read_current_account() -> dict:
+    if not CLAUDE_JSON.exists():
+        return {}
+    try:
+        return read_json(CLAUDE_JSON).get("oauthAccount", {}) or {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def write_current_oauth(oauth: dict) -> None:
+    data = read_json(CRED_FILE) if CRED_FILE.exists() else {}
+    data["claudeAiOauth"] = oauth
+    write_json_secure(CRED_FILE, data)
+
+
+def write_current_account(account: dict) -> None:
+    if not account or not CLAUDE_JSON.exists():
+        return
+    try:
+        data = read_json(CLAUDE_JSON)
+    except (OSError, json.JSONDecodeError):
+        return
+    data["oauthAccount"] = account
+    tmp = CLAUDE_JSON.with_suffix(".json.tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+    tmp.chmod(0o600)
+    tmp.replace(CLAUDE_JSON)
+
+
+def backup_credentials() -> Path:
+    ensure_store()
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = BACKUP_DIR / f"credentials.{stamp}.json"
+    if CRED_FILE.exists():
+        dest.write_text(CRED_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+        dest.chmod(0o600)
+    return dest
+
+
+def oauth_refresh(refresh_token: str) -> dict:
+    body = json.dumps(
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": CLIENT_ID,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        TOKEN_URL,
+        data=body,
+        method="POST",
+        headers={
+            "content-type": "application/json",
+            "accept": "application/json",
+            "user-agent": CLI_UA,
+            "anthropic-beta": OAUTH_BETA,
+        },
+    )
+    try:
+        with urlopen_retry(req, timeout=30) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:200]
+        raise RuntimeError(f"refresh failed: HTTP {exc.code} {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"refresh failed: {exc.reason}") from exc
+
+
+def profile_to_oauth(profile: dict) -> dict:
+    return {
+        "accessToken": profile["accessToken"],
+        "refreshToken": profile["refreshToken"],
+        "expiresAt": profile["expiresAt"],
+        "scopes": profile.get("scopes", []),
+        "subscriptionType": profile.get("subscriptionType", "team"),
+        "rateLimitTier": profile.get("rateLimitTier", "default"),
+    }
+
+
+def is_active(profile: dict) -> bool:
+    if not CRED_FILE.exists():
+        return False
+    try:
+        cur = read_json(CRED_FILE).get("claudeAiOauth", {})
+    except (OSError, json.JSONDecodeError):
+        return False
+    return cur.get("refreshToken") == profile.get("refreshToken") or cur.get(
+        "accessToken"
+    ) == profile.get("accessToken")
+
+
+def ensure_fresh(name: str, profile: dict, skew_seconds: int = 120) -> dict:
+    expires_at_ms = profile.get("expiresAt", 0)
+    if time.time() * 1000 < expires_at_ms - skew_seconds * 1000:
+        return profile
+    tok = oauth_refresh(profile["refreshToken"])
+    profile["accessToken"] = tok["access_token"]
+    profile["refreshToken"] = tok.get("refresh_token", profile["refreshToken"])
+    profile["expiresAt"] = int((time.time() + tok.get("expires_in", 28800)) * 1000)
+    if "scope" in tok:
+        profile["scopes"] = tok["scope"].split()
+    profile["refreshedAt"] = datetime.now(timezone.utc).isoformat()
+    write_json_secure(profile_path(name), profile)
+    if is_active(profile):
+        write_current_oauth(profile_to_oauth(profile))
+    return profile
+
+
+def probe_rate_limit(access_token: str) -> dict:
+    last_err = None
+    for model in PROBE_MODELS:
+        body = json.dumps(
+            {
+                "model": model,
+                "max_tokens": 1,
+                "system": CC_SYSTEM,
+                "messages": [{"role": "user", "content": "ping"}],
+            }
+        ).encode()
+        req = urllib.request.Request(
+            MESSAGES_URL,
+            data=body,
+            method="POST",
+            headers={
+                "authorization": f"Bearer {access_token}",
+                "anthropic-version": "2023-06-01",
+                "anthropic-beta": f"{OAUTH_BETA},claude-code-20250219",
+                "user-agent": CLI_UA,
+                "x-app": "cli",
+                "content-type": "application/json",
+            },
+        )
+        try:
+            with urlopen_retry(req, timeout=30) as resp:
+                return _parse_rl(resp.status, resp.headers)
+        except urllib.error.HTTPError as exc:
+            payload = exc.read().decode(errors="replace")
+            if exc.code == 429:
+                return _parse_rl(exc.code, exc.headers)
+            if exc.code == 404 and "model" in payload.lower():
+                last_err = f"model {model} not available"
+                continue
+            return {"error": f"HTTP {exc.code} {payload[:160]}"}
+        except urllib.error.URLError as exc:
+            return {"error": f"network: {exc.reason}"}
+    return {"error": last_err or "no usable probe model"}
+
+
+def _parse_rl(status_code: int, headers) -> dict:
+    def h(key: str):
+        return headers.get(f"anthropic-ratelimit-unified-{key}")
+
+    out: dict = {"http": status_code}
+    for win in ("5h", "7d"):
+        reset = h(f"{win}-reset")
+        util = h(f"{win}-utilization")
+        out[win] = {
+            "status": h(f"{win}-status"),
+            "reset": int(reset) if reset and reset.isdigit() else None,
+            "utilization": float(util) if util else None,
+        }
+    out["overall"] = h("status")
+    out["representative"] = h("representative-claim")
+    out["overage_reason"] = h("overage-disabled-reason")
+    ra = headers.get("retry-after")
+    out["retry_after"] = int(ra) if ra and ra.isdigit() else None
+    return out
+
+
+def active_email():
+    return read_current_account().get("emailAddress")
+
+
+def org_name(profile: dict) -> str:
+    return (
+        profile.get("organizationName")
+        or profile.get("oauthAccount", {}).get("organizationName")
+        or "(no org)"
+    )
+
+
+def label_of(profile: dict) -> str:
+    email = profile.get("emailAddress") or "(unknown)"
+    return f"{email}  <{org_name(profile)}>"
+
+
+def cmd_save(args: list[str]) -> None:
+    if len(args) != 1:
+        die("usage: cc-acct save <name>")
+    name = args[0]
+    ensure_store()
+    oauth = read_current_oauth()
+    account = read_current_account()
+    profile = {
+        "name": name,
+        "accessToken": oauth["accessToken"],
+        "refreshToken": oauth["refreshToken"],
+        "expiresAt": oauth.get("expiresAt", 0),
+        "scopes": oauth.get("scopes", []),
+        "subscriptionType": oauth.get("subscriptionType"),
+        "rateLimitTier": oauth.get("rateLimitTier"),
+        "emailAddress": account.get("emailAddress"),
+        "accountUuid": account.get("accountUuid"),
+        "organizationUuid": account.get("organizationUuid"),
+        "organizationName": account.get("organizationName"),
+        "seatTier": account.get("seatTier"),
+        "oauthAccount": account,
+        "savedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    write_json_secure(profile_path(name), profile)
+    email = account.get("emailAddress") or "(unknown email)"
+    org = account.get("organizationName") or "(no org)"
+    print(f"saved account {name!r}  -> {email}  [{oauth.get('subscriptionType')}]")
+    print(f"  org:          {org}")
+    print(f"  access token: {mask(oauth['accessToken'])}")
+    print(f"  expires:      {fmt_ts(oauth.get('expiresAt', 0) / 1000)}")
+
+
+def cmd_list(_args: list[str]) -> None:
+    names = list_profiles()
+    if not names:
+        print("no saved accounts. Log into one in Claude Code, then: cc-acct save <name>")
+        return
+    print(f"{'':2}{'NAME':<12}{'EMAIL':<30}{'ORG':<20}{'PLAN':<7}EXPIRES")
+    for name in names:
+        p = load_profile(name)
+        marker = "*" if is_active(p) else " "
+        email = p.get("emailAddress") or "(unknown)"
+        org = org_name(p)
+        if len(org) > 19:
+            org = org[:18] + "\u2026"
+        plan = p.get("subscriptionType") or "?"
+        exp = fmt_ts(p.get("expiresAt", 0) / 1000) if p.get("expiresAt") else "?"
+        print(f"{marker:2}{name:<12}{email:<30}{org:<20}{plan:<7}{exp}")
+    print("\n* = currently active account")
+
+
+def cmd_whoami(_args: list[str]) -> None:
+    acct = read_current_account()
+    email = acct.get("emailAddress") or "(unknown)"
+    org = acct.get("organizationName") or "(no org)"
+    print(f"active account: {email}")
+    print(f"organization:   {org}")
+    matches = [n for n in list_profiles() if is_active(load_profile(n))]
+    if matches:
+        print(f"saved as:       {', '.join(repr(m) for m in matches)}")
+    else:
+        print("saved as:       (not saved yet - run: cc-acct save <name>)")
+
+
+def _print_status_for(name: str) -> None:
+    p = load_profile(name)
+    label = label_of(p)
+    active = " (active)" if is_active(p) else ""
+    try:
+        p = ensure_fresh(name, p)
+    except RuntimeError as exc:
+        print(f"\n{name}  [{label}]{active}")
+        print(f"  token refresh failed: {exc}")
+        print(f"  -> re-login to this account in Claude Code, then: cc-acct save {name}")
+        return
+
+    rl = probe_rate_limit(p["accessToken"])
+    # A 401 on a not-yet-expired token means it was invalidated server-side
+    # (e.g. its refresh token rotated). Try one forced refresh + retry.
+    if rl.get("error", "").startswith("HTTP 401"):
+        try:
+            tok = oauth_refresh(p["refreshToken"])
+            p["accessToken"] = tok["access_token"]
+            p["refreshToken"] = tok.get("refresh_token", p["refreshToken"])
+            p["expiresAt"] = int((time.time() + tok.get("expires_in", 28800)) * 1000)
+            if "scope" in tok:
+                p["scopes"] = tok["scope"].split()
+            p["refreshedAt"] = datetime.now(timezone.utc).isoformat()
+            write_json_secure(profile_path(name), p)
+            if is_active(p):
+                write_current_oauth(profile_to_oauth(p))
+            rl = probe_rate_limit(p["accessToken"])
+        except RuntimeError as exc:
+            rl = {"error": f"401 then refresh failed: {exc}"}
+
+    print(f"\n{name}  [{label}]{active}")
+    if "error" in rl:
+        print(f"  probe error: {rl['error']}")
+        if "401" in rl["error"]:
+            print(f"  -> re-login to this account in Claude Code, then: cc-acct save {name}")
+        return
+
+    now = time.time()
+    for win, title in (("5h", "5-hour "), ("7d", "weekly ")):
+        d = rl.get(win, {})
+        status = d.get("status") or "?"
+        util = d.get("utilization")
+        reset = d.get("reset")
+        util_s = f"{util * 100:.0f}%" if util is not None else "?"
+        line = f"  {title}window: {status:<9} usage {util_s:>5}"
+        if reset:
+            line += f"  resets {fmt_ts(reset)} (in {human_delta(reset - now)})"
+        print(line)
+
+    overall = rl.get("overall")
+    if overall and overall != "allowed":
+        reason = rl.get("overage_reason")
+        extra = f" ({reason})" if reason else ""
+        blocking = [
+            rl[w]["reset"]
+            for w in ("5h", "7d")
+            if rl.get(w, {}).get("status") == "rejected" and rl[w].get("reset")
+        ]
+        print(f"  >> RATE LIMITED{extra}")
+        if blocking:
+            soonest = min(blocking)
+            print(f"  >> OK again at {fmt_ts(soonest)}  (in {human_delta(soonest - now)})")
+    else:
+        print("  >> OK to use now")
+
+
+def cmd_status(args: list[str]) -> None:
+    if args:
+        _print_status_for(args[0])
+        return
+    names = list_profiles()
+    if not names:
+        die("no saved accounts. Run: cc-acct save <name>")
+    print("Claude account usage status:")
+    for name in names:
+        _print_status_for(name)
+
+
+def cmd_switch(args: list[str]) -> None:
+    if len(args) != 1:
+        die("usage: cc-acct switch <name>")
+    name = args[0]
+    p = load_profile(name)
+    if is_active(p):
+        print(f"{name!r} is already the active account.")
+        return
+    try:
+        p = ensure_fresh(name, p)
+    except RuntimeError as exc:
+        die(f"cannot switch: {exc}\n-> re-login to {name!r} in Claude Code then: cc-acct save {name}")
+    bak = backup_credentials()
+    write_current_oauth(profile_to_oauth(p))
+    if p.get("oauthAccount"):
+        write_current_account(p["oauthAccount"])
+    email = p.get("emailAddress") or "(unknown)"
+    print(f"switched active account -> {name!r}  ({email})")
+    print(f"  previous credentials backed up: {bak}")
+    print("  restart Claude Code (or open a new session) to pick up the new account.")
+
+
+def cmd_refresh(args: list[str]) -> None:
+    if len(args) != 1:
+        die("usage: cc-acct refresh <name>")
+    name = args[0]
+    p = load_profile(name)
+    tok = oauth_refresh(p["refreshToken"])
+    p["accessToken"] = tok["access_token"]
+    p["refreshToken"] = tok.get("refresh_token", p["refreshToken"])
+    p["expiresAt"] = int((time.time() + tok.get("expires_in", 28800)) * 1000)
+    if "scope" in tok:
+        p["scopes"] = tok["scope"].split()
+    p["refreshedAt"] = datetime.now(timezone.utc).isoformat()
+    write_json_secure(profile_path(name), p)
+    if is_active(p):
+        write_current_oauth(profile_to_oauth(p))
+    print(f"refreshed {name!r}; new token expires {fmt_ts(p['expiresAt'] / 1000)}")
+
+
+def cmd_rm(args: list[str]) -> None:
+    if len(args) != 1:
+        die("usage: cc-acct rm <name>")
+    p = profile_path(args[0])
+    if not p.exists():
+        die(f"no saved account named {args[0]!r}")
+    p.unlink()
+    print(f"removed saved account {args[0]!r}")
+
+
+COMMANDS = {
+    "save": cmd_save,
+    "list": cmd_list,
+    "ls": cmd_list,
+    "whoami": cmd_whoami,
+    "status": cmd_status,
+    "switch": cmd_switch,
+    "use": cmd_switch,
+    "refresh": cmd_refresh,
+    "rm": cmd_rm,
+    "remove": cmd_rm,
+}
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+    cmd, *rest = argv
+    handler = COMMANDS.get(cmd)
+    if not handler:
+        die(f"unknown command {cmd!r}. Run: cc-acct --help")
+    handler(rest)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)

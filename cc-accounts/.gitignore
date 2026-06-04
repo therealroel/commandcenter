@@ -1,0 +1,3 @@
+# Never commit token snapshots, even if someone copies them here.
+*.json
+backups/
