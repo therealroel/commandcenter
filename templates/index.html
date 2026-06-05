@@ -2856,6 +2856,7 @@ body::after {
     try {
       const data = {
         panelCount,
+        visible: visiblePanels,
         panelProject,
         agents: panels.map(p => p.agentIdx),
         panelState: panels.map((p, i) => ({
@@ -2868,15 +2869,15 @@ body::after {
       // Also save to server for persistence
       const panelStateObj = {};
       data.panelState.forEach(ps => {
-        // Only save panels that are visible (panel < panelCount)
-        if (ps.panel < panelCount) {
+        // Only save panels that are currently visible.
+        if (visiblePanels.includes(ps.panel)) {
           panelStateObj[String(ps.panel)] = { project: ps.project, agent: ps.agent };
         }
       });
       fetch('/api/panel-state', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ panels: panelStateObj, panel_count: panelCount })
+        body: JSON.stringify({ panels: panelStateObj, panel_count: panelCount, visible: visiblePanels })
       }).catch(e => console.warn('saveSettings to server failed:', e));
     } catch (e) {
       console.warn('saveSettings failed:', e);
@@ -2905,7 +2906,9 @@ body::after {
   }
   function restoreSettings(saved) {
     if (!saved) return;
-    if (saved.panelCount) {
+    if (Array.isArray(saved.visible) && saved.visible.length) {
+      applyVisible(saved.visible);
+    } else if (saved.panelCount) {
       applyPanelCount(saved.panelCount);
     }
     if (saved.panelProject) {
@@ -3612,7 +3615,7 @@ body::after {
       chip.className = 'strip-chip';
       const boundTo = [];
       Object.entries(panelProject).forEach(([pid, name]) => {
-        if (parseInt(pid) < panelCount && name === p.name) boundTo.push(pid);
+        if (visiblePanels.includes(parseInt(pid)) && name === p.name) boundTo.push(pid);
       });
       if (boundTo.length) chip.classList.add('bound');
       chip.innerHTML = `
@@ -3641,17 +3644,57 @@ body::after {
   let panelCount = 2;
   const mainEl = document.querySelector('.main');
 
-  // Apply a channel count to the layout: update buttons, grid, panel visibility.
-  // Used both by the click handler and when restoring saved state on boot.
-  function applyPanelCount(count) {
-    panelCount = count;
+  // Which panel slots are currently visible, in ascending order. This is the
+  // source of truth for the layout — panels are bound to fixed slots (their
+  // tmux session name includes the slot index), so we never move content
+  // between slots; we just show/hide slots. Defaults to the first 2.
+  let visiblePanels = [0, 1];
+
+  // Pure helper: given the currently-visible slots, a target count, and the
+  // focused slot, decide which slots should be visible afterwards.
+  //  - Shrinking keeps the focused slot (that's the bug fix: collapsing to a
+  //    single channel must keep the one you're actually using, not always #0).
+  //  - Growing keeps what's visible and fills with the lowest free slots.
+  // Exposed on window for unit testing.
+  function computeVisible(currentVisible, targetCount, focused) {
+    let vis;
+    if (targetCount >= currentVisible.length) {
+      vis = [...currentVisible];
+      for (let i = 0; i < 3 && vis.length < targetCount; i++) {
+        if (!vis.includes(i)) vis.push(i);
+      }
+    } else {
+      vis = [];
+      if (currentVisible.includes(focused)) vis.push(focused);
+      for (const pid of currentVisible) {
+        if (vis.length >= targetCount) break;
+        if (!vis.includes(pid)) vis.push(pid);
+      }
+    }
+    return [...new Set(vis)].filter(i => i >= 0 && i < 3).sort((a, b) => a - b);
+  }
+  window.computeVisible = computeVisible;
+
+  // Apply an explicit set of visible slots: update buttons, grid, visibility.
+  function applyVisible(vis) {
+    vis = [...new Set(vis)].filter(i => i >= 0 && i < 3).sort((a, b) => a - b);
+    if (vis.length === 0) vis = [0];
+    visiblePanels = vis;
+    panelCount = vis.length;
     document.querySelectorAll('#layout-switch button').forEach(b => {
-      b.classList.toggle('on', parseInt(b.dataset.count) === count);
+      b.classList.toggle('on', parseInt(b.dataset.count) === panelCount);
     });
-    mainEl.setAttribute('data-panels', count);
+    mainEl.setAttribute('data-panels', panelCount);
     document.querySelectorAll('.chat-panel').forEach((p, i) => {
-      p.setAttribute('data-hidden', i >= count ? '1' : '0');
+      p.setAttribute('data-hidden', vis.includes(i) ? '0' : '1');
     });
+  }
+
+  // Apply a channel count to the layout, keeping the first `count` slots.
+  // Used when restoring saved state where we only know a count (no explicit
+  // visible set). Live layout-button clicks go through computeVisible instead.
+  function applyPanelCount(count) {
+    applyVisible(Array.from({ length: count }, (_, i) => i));
   }
 
   document.getElementById('layout-switch').addEventListener('click', (e) => {
@@ -3659,17 +3702,20 @@ body::after {
     if (!btn) return;
     const count = parseInt(btn.dataset.count);
     if (count === panelCount) return;
-    applyPanelCount(count);
-    // Assign projects to newly visible panels and open terminals
-    for (let i = 0; i < count; i++) {
+    // Pick the visible set, preferring to keep the active/focused channel.
+    applyVisible(computeVisible(visiblePanels, count, focusedPanel));
+    // Assign projects to newly visible panels and open their terminals. Don't
+    // re-open slots that already have a live terminal — that would tear down
+    // the session of the channel we're keeping.
+    visiblePanels.forEach(i => {
       if (!panelProject[i] && PROJECT_LIST[i]) {
         panelProject[i] = PROJECT_LIST[i].name;
       }
       if (panelProject[i]) {
         applyProjectToPanel(i);
-        openTerm(i);
+        if (!terms[i]) openTerm(i);
       }
-    }
+    });
     // Resize + repaint existing terminals. A panel that was hidden and is now
     // visible again needs a refresh() — the DOM renderer won't repaint a
     // re-shown grid on its own. Defer one tick so the layout has settled.
@@ -3711,9 +3757,12 @@ body::after {
         // Response shape: { panels: { "0": {project, agent}, ... }, panel_count }
         const serverState = (serverResp && serverResp.panels) || {};
         const serverCount = serverResp && serverResp.panel_count;
+        const serverVisible = serverResp && serverResp.visible;
         if (Object.keys(serverState).length > 0) {
           // Server has state - use it
-          if (typeof serverCount === 'number' && serverCount >= 1 && serverCount <= 3) {
+          if (Array.isArray(serverVisible) && serverVisible.length) {
+            applyVisible(serverVisible);
+          } else if (typeof serverCount === 'number' && serverCount >= 1 && serverCount <= 3) {
             applyPanelCount(serverCount);
           }
           for (const [panelStr, data] of Object.entries(serverState)) {
@@ -3748,7 +3797,7 @@ body::after {
       }
       renderProjectsStrip();
       // Open terminals for all visible panels with projects
-      panels.filter(p => p.id < panelCount && panelProject[p.id]).forEach(p => openTerm(p.id));
+      visiblePanels.filter(id => panelProject[id]).forEach(id => openTerm(id));
       opened = true; // prevent maybeBoot from running after us
     } catch (e) {
       console.error('loadProjects failed', e);
@@ -4119,9 +4168,9 @@ body::after {
     // Only open the panels that are actually visible in the current layout.
     // Otherwise we'd spawn a third, projectless PTY in 2-panel mode and waste
     // a tmux session per page load.
-    panels
-      .filter(p => p.id < panelCount && panelProject[p.id])
-      .forEach(p => openTerm(p.id));
+    visiblePanels
+      .filter(id => panelProject[id])
+      .forEach(id => openTerm(id));
   }
   socket.on('connect', maybeBoot);
   loadProjects().then(maybeBoot);

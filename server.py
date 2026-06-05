@@ -883,6 +883,7 @@ def api_panel_state():
     return jsonify({
         "panels": settings.get("panels", {}),
         "panel_count": settings.get("panel_count"),
+        "visible": settings.get("visible"),
     })
 
 
@@ -891,7 +892,8 @@ def api_save_panel_state():
     data = request.get_json(force=True) or {}
     # data should be {
     #   "panels": { "0": {"project": "...", "agent": "..."}, ... },
-    #   "panel_count": 1|2|3
+    #   "panel_count": 1|2|3,
+    #   "visible": [0, 2]   # which slots are shown (may be non-contiguous)
     # }
     panels_data = data.get("panels", {})
     if not isinstance(panels_data, dict):
@@ -902,8 +904,14 @@ def api_save_panel_state():
     panel_count = data.get("panel_count")
     if isinstance(panel_count, int) and 1 <= panel_count <= 3:
         settings["panel_count"] = panel_count
+    # Persist which slots are visible (keeps the active channel on collapse).
+    visible = data.get("visible")
+    if isinstance(visible, list):
+        clean = sorted({v for v in visible if isinstance(v, int) and 0 <= v < 3})
+        if clean:
+            settings["visible"] = clean
     _save_settings(settings)
-    logger.info(f"Saved panel state: {panels_data} (count={settings.get('panel_count')})")
+    logger.info(f"Saved panel state: {panels_data} (count={settings.get('panel_count')}, visible={settings.get('visible')})")
     return jsonify({"ok": True})
 
 
