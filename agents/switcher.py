@@ -15,8 +15,30 @@ class AgentSwitcher:
         if config_path is None:
             config_path = os.path.join(os.path.dirname(__file__), "..", "config", "projects.json")
         self.config_path = os.path.abspath(config_path)
+        self.example_path = os.path.join(os.path.dirname(self.config_path), "projects.example.json")
+
+    def _ensure_config(self) -> None:
+        """Create projects.json on first run so the app always has a config.
+
+        Seeds from projects.example.json when present, otherwise writes an
+        empty project list. This is what lets us keep the user's real
+        projects.json out of git — it's regenerated locally on demand.
+        """
+        if os.path.exists(self.config_path):
+            return
+        seed = {"projects": []}
+        try:
+            if os.path.exists(self.example_path):
+                with open(self.example_path, "r") as f:
+                    seed = json.load(f)
+        except Exception:
+            seed = {"projects": []}
+        os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+        with open(self.config_path, "w") as f:
+            json.dump(seed, f, indent=2)
 
     def load_projects(self) -> list:
+        self._ensure_config()
         with open(self.config_path, "r") as f:
             data = json.load(f)
         return data["projects"]

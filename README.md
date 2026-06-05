@@ -88,15 +88,16 @@ Windows requires WSL (native Windows not supported due to PTY limitations).
 
 ### Projects Setup
 
-On first run, copy `config/projects.example.json` to `config/projects.json`:
+`config/projects.json` is created automatically on first run, seeded from
+`config/projects.example.json` (or an empty list if the example is missing).
+No manual copy step is required.
 
-```bash
-cp config/projects.example.json config/projects.json
-```
+To customize, edit `config/projects.json` directly, or use the GUI: press
+`+ ADD PROJECT` in the project palette to browse and add folders.
 
-Or use the GUI: Press `+ ADD PROJECT` in the project palette to browse and add folders.
-
-The `projects.json` file is gitignored — your private project settings are never pushed to the repo.
+The `projects.json` file is gitignored — your private project settings are
+never pushed to the repo. Same goes for `config/settings.json` (runtime
+state), which is generated on demand.
 
 ### Environment Variables
 
