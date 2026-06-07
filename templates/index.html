@@ -1278,6 +1278,7 @@ body::after {
   border-left: 2px solid var(--green);
 }
 .subs-card.limited::before { border-left-color: var(--red); }
+.subs-card.warning::before { border-left-color: var(--yellow); }
 .subs-card.unknown::before { border-left-color: var(--text-dim); }
 .subs-card.error::before   { border-left-color: var(--yellow); }
 .subs-card:hover {
@@ -1304,6 +1305,7 @@ body::after {
   box-shadow: var(--glow-green);
 }
 .subs-state-dot.limited { background: var(--red); box-shadow: var(--glow-red); }
+.subs-state-dot.warning { background: var(--yellow); box-shadow: 0 0 6px rgba(255,170,0,0.6); }
 .subs-state-dot.unknown { background: var(--text-dim); box-shadow: none; }
 .subs-state-dot.error   { background: var(--yellow); box-shadow: 0 0 6px rgba(255,170,0,0.6); }
 

@@ -507,18 +507,26 @@ def _print_status_for(name: str) -> None:
         print(line)
 
     overall = rl.get("overall")
-    if overall and overall != "allowed":
-        reason = rl.get("overage_reason")
+    # Only an actual `rejected` window (or an explicit overall rejection) means
+    # the account is blocked. `allowed_warning` is just a "near the limit"
+    # heads-up — the account is fully usable. And `overage_reason` is a
+    # persistent header present even while allowed, so it can't decide limited.
+    rejected = [
+        w for w in ("5h", "7d")
+        if rl.get(w, {}).get("status") == "rejected"
+    ]
+    limited = bool(rejected) or overall == "rejected"
+    reason = rl.get("overage_reason")
+    if limited:
         extra = f" ({reason})" if reason else ""
-        blocking = [
-            rl[w]["reset"]
-            for w in ("5h", "7d")
-            if rl.get(w, {}).get("status") == "rejected" and rl[w].get("reset")
-        ]
+        blocking = [rl[w]["reset"] for w in rejected if rl[w].get("reset")]
         print(f"  >> RATE LIMITED{extra}")
         if blocking:
             soonest = min(blocking)
             print(f"  >> OK again at {fmt_ts(soonest)}  (in {human_delta(soonest - now)})")
+    elif overall == "allowed_warning":
+        extra = f" ({reason})" if reason else ""
+        print(f"  >> OK to use now (approaching a limit{extra})")
     else:
         print("  >> OK to use now")
 

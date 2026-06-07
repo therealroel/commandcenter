@@ -19,12 +19,15 @@ The "never run out" strategy, split by account role:
   * NON-ACTIVE accounts — we own their refresh chain. We proactively refresh
     them well BEFORE expiry (default: 45 min of headroom) and persist the
     rotated token. Safe because nothing else touches these tokens.
-  * The ACTIVE account — Claude Code itself refreshes this one. If we also
-    refresh it, whichever side refreshes second invalidates the other
-    (-> invalid_grant -> forced re-login). So we NEVER network-refresh the
-    active account; instead we re-sync our stored snapshot FROM Claude Code's
-    live ~/.claude/.credentials.json, so our copy tracks its rotations and
-    stays current without ever fighting it.
+  * The ACTIVE account — Claude Code normally refreshes this one while it's
+    making API calls. We never *race* it: we re-sync our stored snapshot FROM
+    Claude Code's live ~/.claude/.credentials.json so our copy tracks its
+    rotations. BUT an idle active account (e.g. one auto-switch parked here)
+    gets no API calls, so Claude Code never refreshes it and it would lapse.
+    As a safety net, when the active token is near expiry AND its live refresh
+    token still matches our snapshot (proof Claude Code hasn't rotated it), we
+    refresh it ourselves and write the rotation back into Claude Code's live
+    credentials — closing the only window in which a sub could expire.
 """
 
 from __future__ import annotations
@@ -163,12 +166,55 @@ class ClaudeSubsService:
     def _keep_alive(self, m, name: str, profile: dict, active: bool) -> tuple[dict, str | None]:
         """Ensure this account's token stays valid. Returns (profile, error).
 
-        Active  -> mirror Claude Code's tokens (never refresh ourselves).
+        Active  -> mirror Claude Code's tokens; if it's about to expire and
+                   Claude Code has NOT rotated it (it's idle), refresh it
+                   ourselves as a fallback so an idle active account can't lapse.
         Others  -> proactively refresh while there's still plenty of headroom,
                    persisting the rotated single-use refresh token.
         """
         if active:
-            return self._sync_active_from_claude(m, name, profile), None
+            profile = self._sync_active_from_claude(m, name, profile)
+
+            # Safety net for an IDLE active account. Claude Code only rotates a
+            # token while it's making API calls; if the active account just sits
+            # there (e.g. parked here by auto-switch) nobody refreshes it and it
+            # expires — exactly the lapse that forces a re-login. So if it's
+            # near expiry AND the live refresh token still matches our snapshot
+            # (proof Claude Code hasn't rotated it out from under us), we refresh
+            # it ourselves and write the rotation straight back into Claude
+            # Code's live credentials so the two never diverge.
+            expires_at_ms = profile.get("expiresAt") or 0
+            seconds_left = expires_at_ms / 1000 - time.time()
+            if seconds_left > self.REFRESH_HEADROOM_SECONDS:
+                return profile, None  # plenty of life left, leave it to CC
+
+            try:
+                live = m.read_current_oauth()
+            except Exception:
+                return profile, None  # can't verify — stay hands-off
+            live_refresh = live.get("refreshToken")
+            if not live_refresh or live_refresh != profile.get("refreshToken"):
+                # Claude Code already rotated it; our sync above tracks that.
+                return profile, None
+
+            try:
+                tok = m.oauth_refresh(profile["refreshToken"])
+                profile["accessToken"] = tok["access_token"]
+                profile["refreshToken"] = tok.get("refresh_token", profile["refreshToken"])
+                profile["expiresAt"] = int((time.time() + tok.get("expires_in", 28800)) * 1000)
+                if "scope" in tok:
+                    profile["scopes"] = tok["scope"].split()
+                profile["refreshedAt"] = datetime.now(timezone.utc).isoformat()
+                m.write_json_secure(m.profile_path(name), profile)
+                # Push the rotation into Claude Code's live creds so it keeps
+                # using the same (now-valid) chain instead of the dead token.
+                m.write_current_oauth(m.profile_to_oauth(profile))
+                logger.info(f"claude-subs: refreshed IDLE active account '{name}' "
+                            f"({int(seconds_left/60)}m of life remained)")
+            except Exception as exc:
+                logger.warning(f"claude-subs: idle-active refresh failed for '{name}': {exc}")
+                return profile, f"token refresh failed: {exc}"
+            return profile, None
 
         # Safety: never refresh a non-active profile whose refresh token is the
         # SAME as the live Claude Code account's. That means this profile points
@@ -393,16 +439,37 @@ class ClaudeSubsService:
         base["windows"] = windows
 
         overall = rl.get("overall")
-        limited = bool(overall and overall != "allowed")
+        # A card is only truly LIMITED when a window is actually `rejected`
+        # (or the overall status is an explicit rejection). Anthropic also emits
+        # `allowed_warning` — that's a "you're getting close" heads-up, NOT a
+        # block: the account is fully usable. Treating anything != "allowed" as
+        # limited (the old check) wrongly turned warned-but-usable accounts red.
+        # `overage_reason` is a persistent header that is present even while
+        # allowed (e.g. a healthy account can still report org_level_disabled),
+        # so it must NOT be used to decide limited state.
+        rejected_windows = [
+            w for w in ("5h", "7d")
+            if windows.get(w, {}).get("status") == "rejected"
+        ]
+        limited = bool(rejected_windows) or overall == "rejected"
+        warning = (not limited) and overall == "allowed_warning"
         if limited:
             blocking = [
                 windows[w]["reset"]
-                for w in ("5h", "7d")
-                if windows.get(w, {}).get("status") == "rejected" and windows[w].get("reset")
+                for w in rejected_windows
+                if windows[w].get("reset")
             ]
             base["ok_again"] = min(blocking) if blocking else None
             base["overage_reason"] = rl.get("overage_reason")
-        base["state"] = "limited" if limited else "ok"
+        if limited:
+            base["state"] = "limited"
+        elif warning:
+            # Usable, but near a window limit — surface as a soft warning so the
+            # UI can show amber instead of green/red. Carry the reason for info.
+            base["state"] = "warning"
+            base["overage_reason"] = rl.get("overage_reason")
+        else:
+            base["state"] = "ok"
         return base
 
     # ------------------------------------------------------------------ #
@@ -433,9 +500,10 @@ class ClaudeSubsService:
     def _account_ready(acct: dict) -> bool:
         """True if an account is usable right now (not rate-limited / errored).
 
-        Healthy = state 'ok', and its 5h window isn't rejected.
+        Usable = state 'ok' or 'warning' (a warning is just "near a limit", the
+        account still works), and its 5h window isn't rejected.
         """
-        if acct.get("state") != "ok":
+        if acct.get("state") not in ("ok", "warning"):
             return False
         win = (acct.get("windows") or {}).get("5h") or {}
         return win.get("status") != "rejected"
@@ -529,8 +597,63 @@ class ClaudeSubsService:
         return None
 
     # ------------------------------------------------------------------ #
+    def _capture_outgoing(self, m) -> None:
+        """Before switching away, persist the live tokens into whichever saved
+        profile is currently active.
+
+        This closes the chain-corruption bug that forced a re-login: a switch
+        overwrites the live credentials, but if we never captured Claude Code's
+        latest rotation of the OUTGOING account, that profile keeps a stale,
+        already-rotated refresh token. The next switch back writes that dead
+        token into the live creds → invalid_grant → forced re-login. Capturing
+        here keeps every profile's chain head current no matter how we switch.
+        """
+        try:
+            live = m.read_current_oauth()
+        except Exception:
+            return  # no live creds to capture (nothing active yet)
+        live_access = live.get("accessToken")
+        if not live_access:
+            return
+        try:
+            names = m.list_profiles()
+        except Exception:
+            return
+        for name in names:
+            try:
+                p = m.load_profile(name)
+            except SystemExit:
+                continue
+            # The active profile is the one whose tokens equal the live creds.
+            if not self._is_active(m, p):
+                continue
+            if p.get("accessToken") == live_access:
+                return  # already current, nothing to persist
+            p["accessToken"] = live_access
+            p["refreshToken"] = live.get("refreshToken", p.get("refreshToken"))
+            p["expiresAt"] = live.get("expiresAt", p.get("expiresAt"))
+            if live.get("scopes"):
+                p["scopes"] = live["scopes"]
+            p["syncedAt"] = datetime.now(timezone.utc).isoformat()
+            try:
+                m.write_json_secure(m.profile_path(name), p)
+                logger.info(f"claude-subs: captured outgoing account '{name}' "
+                            f"before switch (chain kept current)")
+            except Exception as exc:
+                logger.warning(f"claude-subs: could not capture outgoing '{name}': {exc}")
+            return
+
     def switch(self, name: str) -> dict:
-        """Make ``name`` the active Claude Code account (backs up current first)."""
+        """Make ``name`` the active Claude Code account (backs up current first).
+
+        Hardened against credential-chain corruption:
+          1. Capture the OUTGOING account's live token into its profile first,
+             so its single-use refresh chain head never goes stale.
+          2. Refresh + validate the INCOMING token before committing — never
+             write a token we can't prove is fresh into the live credentials.
+          3. If the live write half-fails, restore the backup so Claude Code is
+             never left wedged with partial credentials.
+        """
         m = self._mod
         if m is None:
             return {"ok": False, "error": "cc-acct not found"}
@@ -545,19 +668,47 @@ class ClaudeSubsService:
                 return {"ok": True, "already_active": True, "name": name,
                         "email": p.get("emailAddress")}
 
+            # (1) Preserve the outgoing account's latest rotation before we
+            # clobber the live credentials. This is what stops a later
+            # switch-back from replaying a dead token.
+            self._capture_outgoing(m)
+
+            # (2) Ensure the incoming token is fresh AND valid. ensure_fresh
+            # refreshes if near expiry and persists the rotation back to the
+            # profile, so we never hand Claude Code an expired/expiring token.
             try:
                 p = m.ensure_fresh(name, p)
             except Exception as exc:
                 return {"ok": False, "error": f"cannot switch: {exc}",
                         "hint": f"re-login to '{name}' in Claude Code then: cc-acct save {name}"}
 
+            if not p.get("accessToken"):
+                return {"ok": False, "error": "profile has no access token",
+                        "hint": f"re-login to '{name}' in Claude Code then: cc-acct save {name}"}
+
+            # (3) Commit, with rollback if the write half-fails.
+            backup = None
             try:
                 backup = m.backup_credentials()
                 m.write_current_oauth(m.profile_to_oauth(p))
                 if p.get("oauthAccount"):
                     m.write_current_account(p["oauthAccount"])
             except Exception as exc:
-                return {"ok": False, "error": f"switch failed: {exc}"}
+                # Restore the pre-switch credentials so Claude Code isn't left
+                # with a half-written / inconsistent token.
+                restored = False
+                try:
+                    if backup and Path(str(backup)).exists():
+                        data = m.read_json(Path(str(backup)))
+                        if data.get("claudeAiOauth"):
+                            m.write_current_oauth(data["claudeAiOauth"])
+                            restored = True
+                except Exception as rexc:
+                    logger.error(f"claude-subs: switch rollback FAILED for '{name}': {rexc}")
+                return {"ok": False,
+                        "error": f"switch failed: {exc}"
+                                 + ("" if restored else " (and rollback failed — check ~/.claude)"),
+                        "rolled_back": restored}
 
             return {
                 "ok": True,
