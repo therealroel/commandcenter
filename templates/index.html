@@ -521,6 +521,12 @@ body::after {
 .gmail-tab-btn[data-tab="feed"].on,
 .gmail-tab-btn[data-tab="cleanup"].on { border-color: var(--border-bright); color: var(--text-secondary); background: rgba(255,255,255,0.05); }
 
+/* Non-active tab counts glow when they have items */
+.gmail-tab-btn[data-tab="high"].has-items:not(.on) .gmail-tab-count { color: rgba(255,68,102,0.8); background: rgba(255,68,102,0.14); }
+.gmail-tab-btn[data-tab="action"].has-items:not(.on) .gmail-tab-count { color: rgba(255,170,0,0.8); background: rgba(255,170,0,0.14); }
+.gmail-tab-btn[data-tab="feed"].has-items:not(.on) .gmail-tab-count,
+.gmail-tab-btn[data-tab="cleanup"].has-items:not(.on) .gmail-tab-count { color: var(--text-secondary); background: rgba(255,255,255,0.1); }
+
 .gmail-summary {
   font-size: 10px;
   color: var(--text-secondary);
@@ -586,15 +592,32 @@ body::after {
   padding: 6px 10px 6px 13px;
   border-bottom: 1px solid var(--border);
   border-left: 3px solid transparent;
-  transition: background 0.1s ease;
+  transition: background 0.12s ease;
   cursor: default;
   position: relative;
 }
 .gmail-card:last-child { border-bottom: none; }
 .gmail-card:hover { background: rgba(255,255,255,0.025); }
-.gmail-section.high .gmail-card { border-left-color: rgba(255,68,102,0.5); }
-.gmail-section.action .gmail-card { border-left-color: rgba(255,170,0,0.4); }
+
+/* Tier border — brighter on unread */
+.gmail-section.high .gmail-card { border-left-color: rgba(255,68,102,0.35); }
+.gmail-section.high .gmail-card.unread { border-left-color: var(--red); }
+.gmail-section.action .gmail-card { border-left-color: rgba(255,170,0,0.3); }
+.gmail-section.action .gmail-card.unread { border-left-color: var(--yellow); }
 .gmail-section.feed .gmail-card { border-left-color: var(--border); }
+
+/* HIGH unread — subtle red ambient background */
+.gmail-section.high .gmail-card.unread {
+  background: linear-gradient(90deg, rgba(255,68,102,0.055) 0%, transparent 70%);
+}
+.gmail-section.high .gmail-card.unread:hover {
+  background: linear-gradient(90deg, rgba(255,68,102,0.09) 0%, rgba(255,255,255,0.02) 70%);
+}
+
+/* Read cards — everything dims down */
+.gmail-card:not(.unread) .gmail-from { color: var(--text-secondary); font-weight: 600; }
+.gmail-card:not(.unread) .gmail-subject { color: var(--text-dim); }
+.gmail-card:not(.unread) .gmail-time { opacity: 0.55; }
 
 .gmail-card-row1 {
   display: flex;
@@ -616,6 +639,7 @@ body::after {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  transition: color 0.1s ease;
 }
 .gmail-time {
   font-size: 10px;
@@ -623,6 +647,7 @@ body::after {
   flex-shrink: 0;
   font-weight: 500;
   letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
 }
 .gmail-subject {
   font-size: 11px;
@@ -824,9 +849,10 @@ body::after {
 }
 .cal-event-time {
   font-size: 10px;
-  color: var(--cyan-dim);
+  color: var(--cyan);
   letter-spacing: 0.03em;
-  font-weight: 600;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .cal-event-location {
   font-size: 10px;
@@ -835,6 +861,18 @@ body::after {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* All-day events — softer, dimmer treatment */
+.cal-event.all-day .cal-event-bar { background: var(--text-dim); opacity: 0.5; }
+.cal-event.all-day .cal-event-title { color: var(--text-secondary); font-weight: 500; }
+.cal-event.all-day .cal-event-time {
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .cal-empty {
   font-size: 11px;
   color: var(--text-dim);
@@ -4802,7 +4840,8 @@ body::after {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
     });
 
-    // Tab switching
+    // Tab switching — persisted to localStorage
+    const TAB_KEY = 'cc-gmail-tab';
     let userPickedTab = false;
     function activateTab(tier) {
       document.querySelectorAll('.gmail-tab-btn').forEach(b => b.classList.remove('on'));
@@ -4813,6 +4852,13 @@ body::after {
       if (section) section.classList.add('tab-active');
       const cleanupBar = document.getElementById('gmail-cleanup-bar');
       if (cleanupBar) cleanupBar.style.display = tier === 'cleanup' ? '' : 'none';
+      try { localStorage.setItem(TAB_KEY, tier); } catch (_) {}
+    }
+    // Restore saved tab on load
+    const savedTab = localStorage.getItem(TAB_KEY);
+    if (savedTab && document.querySelector(`.gmail-tab-btn[data-tab="${savedTab}"]`)) {
+      activateTab(savedTab);
+      userPickedTab = true;
     }
     document.querySelectorAll('.gmail-tab-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -4858,7 +4904,7 @@ body::after {
 
     function makeCard(email, tier) {
       const card = document.createElement('div');
-      card.className = 'gmail-card';
+      card.className = 'gmail-card' + (email.unread ? ' unread' : '');
       card.dataset.emailId = email.id;
 
       const isCleanup = tier === 'cleanup';
@@ -4920,12 +4966,16 @@ body::after {
       countEl.textContent = emails.length;
       bodyEl.innerHTML = '';
 
+      // Mark tab button with has-items for the glow-count styling
+      const tier = prefix.replace('gmail-', '');
+      const tabBtn = document.querySelector(`.gmail-tab-btn[data-tab="${tier}"]`);
+      if (tabBtn) tabBtn.classList.toggle('has-items', emails.length > 0);
+
       if (!emails.length) {
         bodyEl.innerHTML = '<div class="gmail-empty">Nothing here</div>';
         return;
       }
 
-      const tier = prefix.replace('gmail-', '');
       emails.forEach(email => bodyEl.appendChild(makeCard(email, tier)));
     }
 
@@ -5036,7 +5086,7 @@ body::after {
       body.innerHTML = '';
       events.forEach(ev => {
         const el = document.createElement('div');
-        el.className = 'cal-event';
+        el.className = 'cal-event' + (ev.time === 'All day' ? ' all-day' : '');
         const barColor = ev.color || 'var(--cyan)';
         el.innerHTML = `
           <div class="cal-event-bar" style="background:${barColor}"></div>
