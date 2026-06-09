@@ -116,6 +116,8 @@ docker_service = DockerService()
 claude_subs_service = ClaudeSubsService()
 gmail_service = GmailService()
 calendar_service = CalendarService()
+_gmail_cache = None
+_calendar_cache = None
 
 # Per-panel state -----------------------------------------------------------
 # sid -> { panel_id: {bridge, project, agent} }
@@ -799,7 +801,14 @@ def api_health():
 
 @app.route("/api/version")
 def api_version():
-    return jsonify({"version": __version__})
+    try:
+        git_hash = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, cwd=Path(__file__).parent
+        ).stdout.strip()
+    except Exception:
+        git_hash = ""
+    return jsonify({"version": __version__, "git": git_hash})
 
 
 @app.route("/api/docker")
@@ -1336,6 +1345,8 @@ def gmail_thread():
     while True:
         try:
             data = gmail_service.get_emails()
+            global _gmail_cache
+            _gmail_cache = data
             socketio.emit("gmail_update", data)
             if data.get("new_high"):
                 for email in data["new_high"]:
@@ -1355,10 +1366,41 @@ def calendar_thread():
     while True:
         try:
             data = calendar_service.get_events()
+            global _calendar_cache
+            _calendar_cache = data
             socketio.emit("calendar_update", data)
         except Exception as exc:
             logger.warning(f"calendar_thread error: {exc}")
         gevent.sleep(300)
+
+
+def version_watcher_thread():
+    """Restart the server process when a new git commit lands."""
+    logger.info("THREAD_START: version_watcher_thread")
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, cwd=Path(__file__).parent
+        )
+        current_hash = result.stdout.strip()
+    except Exception:
+        logger.warning("version_watcher: cannot read git HEAD, thread exiting")
+        return
+    while True:
+        gevent.sleep(30)
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, cwd=Path(__file__).parent
+            )
+            latest = result.stdout.strip()
+            if latest and latest != current_hash:
+                logger.info(f"version_watcher: new commit {latest[:8]}, restarting server")
+                socketio.emit("server_restart", {"hash": latest[:8]})
+                gevent.sleep(1.5)
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception as exc:
+            logger.warning(f"version_watcher error: {exc}")
 
 
 # Live tmux session names look like: cc-<project>-<panel>-<agent>
@@ -1622,6 +1664,17 @@ def handle_connect():
         socketio.emit("claude_subs_update", claude_subs_service.get_cached(), to=request.sid)
     except Exception as e:
         logger.warning(f"socket claude-subs on connect failed: {e}")
+    # Send cached gmail/calendar immediately on connect
+    if _gmail_cache:
+        try:
+            socketio.emit("gmail_update", _gmail_cache, to=request.sid)
+        except Exception as e:
+            logger.warning(f"socket gmail cache on connect failed: {e}")
+    if _calendar_cache:
+        try:
+            socketio.emit("calendar_update", _calendar_cache, to=request.sid)
+        except Exception as e:
+            logger.warning(f"socket calendar cache on connect failed: {e}")
 
 
 @socketio.on("disconnect")
@@ -2004,6 +2057,8 @@ if __name__ == "__main__":
     logger.info("  -> gmail_thread started")
     socketio.start_background_task(calendar_thread)
     logger.info("  -> calendar_thread started")
+    socketio.start_background_task(version_watcher_thread)
+    logger.info("  -> version_watcher_thread started")
     socketio.start_background_task(tmux_janitor)
     logger.info("  -> tmux_janitor started")
     logger.info("ALL threads launched, starting server...")

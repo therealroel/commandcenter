@@ -348,6 +348,7 @@ body::after {
 
 /* ============= MAIN PANELS ============= */
 .main {
+  flex: 1;
   padding: 8px 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3384,6 +3385,13 @@ body::after {
       });
     }
     socketEverConnected = true;
+    // On reconnect, check if version changed and reload if so
+    fetch('/api/version').then(r => r.json()).then(v => {
+      if (window._ccVersion && v.git && v.git !== window._ccVersion) {
+        window.location.reload();
+      }
+      window._ccVersion = v.git || v.version;
+    });
   });
 
   socket.on('disconnect', () => {
@@ -4737,6 +4745,10 @@ body::after {
   }
   socket.on('connect', maybeBoot);
   loadProjects().then(maybeBoot);
+  // Capture initial version for change detection on reconnect
+  fetch('/api/version').then(r => r.json()).then(v => {
+    window._ccVersion = v.git || v.version;
+  });
 
   // refit on window resize
   window.addEventListener('resize', () => {
@@ -5533,6 +5545,11 @@ body::after {
     renderEvents();
     updateEventsCard(entry);
     pushTicker(entry.type, entry.message);
+  });
+
+  socket.on('server_restart', function(data) {
+    console.log('Server restarting for new version:', data.hash);
+    setTimeout(function() { window.location.reload(); }, 2000);
   });
 
   // Tint the EVENTS card by the severity of the most recent event:
