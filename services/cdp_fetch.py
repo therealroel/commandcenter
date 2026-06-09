@@ -251,6 +251,52 @@ def delete_emails(email_ids):
         return {"ok": True, "deleted": deleted}
 
 
+def mark_read(thread_ids):
+    from playwright.sync_api import sync_playwright
+
+    ws_url = find_tab('mail.google.com')
+    if not ws_url:
+        return {"ok": False, "error": "no gmail tab open"}
+
+    with sync_playwright() as p:
+        browser = p.chromium.connect_over_cdp(CDP_URL)
+        ctx = browser.contexts[0]
+        page = None
+        for pg in ctx.pages:
+            if 'mail.google.com' in pg.url:
+                page = pg
+                break
+
+        if not page:
+            return {"ok": False, "error": "gmail tab lost"}
+
+        marked = page.evaluate('''(threadIds) => {
+            const rows = document.querySelectorAll('tr.zA');
+            let selected = 0;
+            for (const tid of threadIds) {
+                const row = Array.from(rows).find(r => {
+                    const jslog = r.getAttribute('jslog') || '';
+                    const b64 = (jslog.match(/(?:^|;\\s*)1:([A-Za-z0-9+/]+)/)?.[1] || '');
+                    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+                    try { return atob(padded).includes(`"#thread-f:${tid}"`); }
+                    catch(e) { return false; }
+                });
+                if (!row) continue;
+                const checkbox = row.querySelector('.oZ-x3') || row.querySelector('[role="checkbox"]');
+                if (checkbox) { checkbox.click(); selected++; }
+            }
+            return selected;
+        }''', thread_ids)
+
+        if marked > 0:
+            page.wait_for_timeout(400)
+            # Use Gmail keyboard shortcut Shift+I = mark as read
+            page.keyboard.press('Shift+I')
+            page.wait_for_timeout(600)
+
+        return {"ok": True, "marked": marked}
+
+
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'gmail'
     try:
@@ -262,6 +308,9 @@ if __name__ == '__main__':
         elif cmd == 'delete':
             ids = json.loads(sys.argv[2]) if len(sys.argv) > 2 else []
             result = delete_emails(ids)
+        elif cmd == 'mark_read':
+            ids = json.loads(sys.argv[2]) if len(sys.argv) > 2 else []
+            result = mark_read(ids)
         else:
             result = {"error": f"unknown command: {cmd}"}
         print(json.dumps(result))

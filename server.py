@@ -116,8 +116,19 @@ docker_service = DockerService()
 claude_subs_service = ClaudeSubsService()
 gmail_service = GmailService()
 calendar_service = CalendarService()
-_gmail_cache = None
-_calendar_cache = None
+_GMAIL_CACHE_FILE = Path("config/gmail_cache.json")
+_CALENDAR_CACHE_FILE = Path("config/calendar_cache.json")
+
+def _load_disk_cache(path):
+    try:
+        if path.exists():
+            return json.loads(path.read_text())
+    except Exception:
+        pass
+    return None
+
+_gmail_cache = _load_disk_cache(_GMAIL_CACHE_FILE)
+_calendar_cache = _load_disk_cache(_CALENDAR_CACHE_FILE)
 
 # Per-panel state -----------------------------------------------------------
 # sid -> { panel_id: {bridge, project, agent} }
@@ -902,6 +913,25 @@ def api_gmail_delete():
             gmail_service.record_deletion(sender, "")
     return jsonify(result)
 
+@app.route("/api/gmail/mark-read", methods=["POST"])
+@rate_limit()
+def api_gmail_mark_read():
+    data = request.get_json(force=True, silent=True) or {}
+    ids = data.get("ids", [])
+    if not ids:
+        return jsonify({"ok": False, "error": "no ids"}), 400
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).parent / "services/cdp_fetch.py"), "mark_read",
+             json.dumps(ids)],
+            capture_output=True, text=True, timeout=30
+        )
+        result = json.loads(proc.stdout)
+    except Exception as e:
+        result = {"ok": False, "error": str(e)}
+    return jsonify(result)
+
+
 @app.route("/api/gmail/seen", methods=["POST"])
 @rate_limit()
 def api_gmail_seen():
@@ -1359,6 +1389,11 @@ def gmail_thread():
             data = gmail_service.get_emails()
             global _gmail_cache
             _gmail_cache = data
+            try:
+                _GMAIL_CACHE_FILE.parent.mkdir(exist_ok=True)
+                _GMAIL_CACHE_FILE.write_text(json.dumps(data))
+            except Exception:
+                pass
             socketio.emit("gmail_update", data)
             if data.get("new_high"):
                 for email in data["new_high"]:
@@ -1380,6 +1415,11 @@ def calendar_thread():
             data = calendar_service.get_events()
             global _calendar_cache
             _calendar_cache = data
+            try:
+                _CALENDAR_CACHE_FILE.parent.mkdir(exist_ok=True)
+                _CALENDAR_CACHE_FILE.write_text(json.dumps(data))
+            except Exception:
+                pass
             socketio.emit("calendar_update", data)
         except Exception as exc:
             logger.warning(f"calendar_thread error: {exc}")

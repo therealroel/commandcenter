@@ -709,6 +709,21 @@ body::after {
 }
 .gmail-delete-btn:hover { color: var(--red); }
 
+.gmail-card-read {
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text-dim);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s, border-color 0.15s;
+}
+.gmail-card-read:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+
 .gmail-cleanup-check {
   accent-color: var(--cyan);
   cursor: pointer;
@@ -4955,11 +4970,28 @@ body::after {
           <span class="gmail-subject">${escapeHtml(email.subject)}</span>
           <div class="gmail-card-actions">
             ${email.url ? `<a class="gmail-open-link" href="https://mail.google.com${escapeHtml(email.url)}" target="_blank" rel="noopener" title="Open in Gmail">OPEN</a>` : ''}
+            <button class="gmail-card-read" data-email-id="${escapeHtml(email.id)}" title="Mark as read">✓ READ</button>
             <button class="gmail-delete-btn" data-email-id="${escapeHtml(email.id)}" data-sender="${escapeHtml(email.from)}" title="Delete">✕</button>
           </div>
         </div>
         ${hasSummary ? `<div class="gmail-ai-summary">${escapeHtml(email.summary)}</div>` : ''}
       `;
+
+      card.querySelector('.gmail-card-read').addEventListener('click', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        const readBtn = e.currentTarget;
+        readBtn.textContent = '…';
+        readBtn.disabled = true;
+        fetch('/api/gmail/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [email.id] })
+        }).then(() => {
+          card.classList.remove('unread');
+          readBtn.textContent = '✓';
+        }).catch(() => { readBtn.textContent = 'ERR'; });
+      });
 
       card.querySelector('.gmail-delete-btn').addEventListener('click', (e) => {
         e.stopPropagation();
