@@ -660,20 +660,22 @@ body::after {
   min-width: 0;
 }
 
-/* AI summary — shown only for HIGH/ACTION, dim italic below subject */
+/* AI summary — shown for all tiers, dimmer for feed/cleanup */
 .gmail-card .gmail-ai-summary {
-  display: none;
-}
-.gmail-section.high .gmail-card .gmail-ai-summary,
-.gmail-section.action .gmail-card .gmail-ai-summary {
   display: block;
   font-size: 10px;
-  color: var(--cyan-dim);
+  color: var(--text-dim);
   font-style: italic;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 1px;
+  opacity: 0.7;
+}
+.gmail-section.high .gmail-card .gmail-ai-summary,
+.gmail-section.action .gmail-card .gmail-ai-summary {
+  color: var(--cyan-dim);
+  opacity: 1;
 }
 
 /* Hover-reveal action buttons */
@@ -723,6 +725,41 @@ body::after {
   transition: color 0.15s, border-color 0.15s;
 }
 .gmail-card-read:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+
+/* Expanded card body */
+.gmail-card-expand {
+  display: none;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(0,217,255,0.03);
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.gmail-card.expanded .gmail-card-expand { display: block; }
+.gmail-card.expanded { cursor: default; }
+.gmail-card:not(.expanded) { cursor: pointer; }
+.gmail-card-expand-meta {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.gmail-card-expand-meta span { flex-shrink: 0; }
+.gmail-card-expand-meta .expand-from { color: var(--text-secondary); font-weight: 600; }
+.gmail-card-expand-body {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
 
 .gmail-cleanup-check {
   accent-color: var(--cyan);
@@ -4958,7 +4995,9 @@ body::after {
       const checkHtml = isCleanup
         ? `<input type="checkbox" class="gmail-cleanup-check" data-email-id="${escapeHtml(email.id)}">`
         : '';
-      const hasSummary = email.summary && email.summary !== email.subject;
+      const aiSummary = (email.summary && email.summary !== email.subject) ? email.summary : null;
+      const previewText = aiSummary || email.snippet || '';
+      const hasSummary = !!previewText;
 
       card.innerHTML = `
         <div class="gmail-card-row1">
@@ -4974,7 +5013,15 @@ body::after {
             <button class="gmail-delete-btn" data-email-id="${escapeHtml(email.id)}" data-sender="${escapeHtml(email.from)}" title="Delete">✕</button>
           </div>
         </div>
-        ${hasSummary ? `<div class="gmail-ai-summary">${escapeHtml(email.summary)}</div>` : ''}
+        ${hasSummary ? `<div class="gmail-ai-summary">${escapeHtml(previewText)}</div>` : ''}
+        <div class="gmail-card-expand">
+          <div class="gmail-card-expand-meta">
+            <span class="expand-from">${escapeHtml(email.from_name || email.from)}</span>
+            <span>&lt;${escapeHtml(email.from)}&gt;</span>
+            ${email.recipients ? `<span>→ ${escapeHtml(email.recipients)}</span>` : ''}
+          </div>
+          <div class="gmail-card-expand-body">${escapeHtml(email.snippet || email.allText || '(no preview available)')}</div>
+        </div>
       `;
 
       card.querySelector('.gmail-card-read').addEventListener('click', function(e) {
@@ -5006,6 +5053,12 @@ body::after {
           card.style.transition = 'opacity 0.25s ease';
           setTimeout(() => card.remove(), 250);
         }).catch(() => {});
+      });
+
+      // Click card body to expand/collapse (but not when clicking action buttons)
+      card.addEventListener('click', function(e) {
+        if (e.target.closest('.gmail-card-actions') || e.target.closest('.gmail-cleanup-check')) return;
+        card.classList.toggle('expanded');
       });
 
       return card;
