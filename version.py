@@ -2,4 +2,4 @@
 # MAJOR: Breaking changes
 # MINOR: New features, backward compatible
 # PATCH: Bug fixes, backward compatible
-__version__ = "1.3.1"
+__version__ = "1.4.1"

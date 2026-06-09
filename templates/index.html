@@ -21,8 +21,8 @@
   --border-bright: #2a3a52;
   --grid: rgba(0, 217, 255, 0.04);
   --text-primary: #d8e4f0;
-  --text-secondary: #5f7388;
-  --text-dim: #3a4a5e;
+  --text-secondary: #8ab0cc;
+  --text-dim: #5a7a96;
   --cyan: #00d9ff;
   --cyan-dim: #0090ad;
   --green: #00ff88;
@@ -3117,7 +3117,7 @@ body::after {
     <span id="socket-icon" style="color:var(--green);">●</span><span id="socket-label" style="color:var(--green);">SOCK</span>
     <span id="tmux-icon" style="color:var(--green);">●</span><span id="tmux-label" style="color:var(--green);">TMUX</span>
     <span id="server-icon" style="color:var(--green);">●</span><span id="server-label" style="color:var(--green);">SRV</span>
-    <span>v{{ version }}</span>
+    <span id="footer-version">v{{ version }}</span>
   </div>
 </footer>
 
@@ -4745,9 +4745,11 @@ body::after {
   }
   socket.on('connect', maybeBoot);
   loadProjects().then(maybeBoot);
-  // Capture initial version for change detection on reconnect
+  // Capture initial version for change detection on reconnect; show git hash in footer
   fetch('/api/version').then(r => r.json()).then(v => {
     window._ccVersion = v.git || v.version;
+    const el = document.getElementById('footer-version');
+    if (el) el.textContent = v.git ? `v${v.version} · ${v.git}` : `v${v.version}`;
   });
 
   // refit on window resize
