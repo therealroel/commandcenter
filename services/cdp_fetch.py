@@ -87,8 +87,13 @@ def fetch_gmail():
 
                 const emailId = threadId || row.getAttribute('id') || `row-${i}`;
                 const allText = row.innerText || '';
-                const lines = allText.split('\\n').map(l => l.trim()).filter(l => l && l !== '-');
-                const recipients = lines.length > 1 ? lines[0] : '';
+                // Strip lines that are just thread-count/label noise (e.g. "2", "2 GCP", "3 Inbox")
+                const lines = allText.split('\\n')
+                    .map(l => l.trim())
+                    .filter(l => l && l !== '-' && !/^\\d+\\s*[A-Z]*$/.test(l));
+                const recipients = '';
+                const rawSnippet = lines.slice(1, 4).join(' ').substring(0, 300);
+                const snippet = rawSnippet.replace(/^\\d+\\s+/, '');
 
                 results.push({
                     id: emailId,
@@ -96,7 +101,7 @@ def fetch_gmail():
                     from_name: fromEl.getAttribute('name') || fromEl.textContent.trim(),
                     recipients: recipients,
                     subject: subjectEl ? subjectEl.textContent.trim() : '(no subject)',
-                    snippet: lines.slice(1, 4).join(' ').substring(0, 200),
+                    snippet: snippet,
                     allText: allText.substring(0, 500),
                     time: timeEl ? (timeEl.getAttribute('title') || timeEl.textContent.trim()) : '',
                     unread: isUnread,
@@ -297,6 +302,66 @@ def mark_read(thread_ids):
         return {"ok": True, "marked": marked}
 
 
+def fetch_email_body(url_fragment):
+    """Open Gmail thread in a new tab, extract body text, close tab."""
+    from playwright.sync_api import sync_playwright
+
+    if not url_fragment:
+        return {"ok": False, "body": "no url"}
+
+    full_url = f"https://mail.google.com{url_fragment}"
+
+    # Open a new tab for the thread
+    try:
+        new_tab = cdp_request('new', full_url)
+    except Exception as e:
+        return {"ok": False, "body": f"cannot open tab: {e}"}
+
+    with sync_playwright() as p:
+        browser = p.chromium.connect_over_cdp(CDP_URL)
+        ctx = browser.contexts[0]
+
+        # Wait for new page to appear
+        page = None
+        for _ in range(12):
+            time.sleep(0.5)
+            for pg in ctx.pages:
+                if url_fragment.split('/')[-1] in pg.url or full_url in pg.url:
+                    page = pg
+                    break
+            if page:
+                break
+
+        if not page:
+            return {"ok": False, "body": "tab not found"}
+
+        try:
+            page.wait_for_timeout(2500)
+            body = page.evaluate('''() => {
+                // Try multiple Gmail selectors for email body
+                const selectors = ['.a3s.aiL', '.a3s', '[data-message-id] .ii.gt'];
+                for (const sel of selectors) {
+                    const els = document.querySelectorAll(sel);
+                    let best = '';
+                    els.forEach(el => {
+                        const t = el.innerText.trim();
+                        if (t.length > best.length) best = t;
+                    });
+                    if (best.length > 20) return best.substring(0, 3000);
+                }
+                return '';
+            }''')
+        except Exception as e:
+            body = ""
+        finally:
+            try:
+                page.close()
+            except Exception:
+                pass
+
+    return {"ok": True, "body": body or "(could not extract body)"}
+
+
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'gmail'
     try:
@@ -311,6 +376,9 @@ if __name__ == '__main__':
         elif cmd == 'mark_read':
             ids = json.loads(sys.argv[2]) if len(sys.argv) > 2 else []
             result = mark_read(ids)
+        elif cmd == 'fetch_body':
+            url_frag = sys.argv[2] if len(sys.argv) > 2 else ''
+            result = fetch_email_body(url_frag)
         else:
             result = {"error": f"unknown command: {cmd}"}
         print(json.dumps(result))

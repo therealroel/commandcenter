@@ -929,6 +929,34 @@ def api_gmail_mark_read():
         result = json.loads(proc.stdout)
     except Exception as e:
         result = {"ok": False, "error": str(e)}
+    # Update in-memory + disk cache so read state reflects immediately
+    if result.get("ok") and _gmail_cache:
+        for tier_key in ("high", "action", "feed", "cleanup"):
+            for email in _gmail_cache.get(tier_key, []):
+                if email.get("id") in ids:
+                    email["unread"] = False
+        try:
+            _GMAIL_CACHE_FILE.write_text(json.dumps(_gmail_cache))
+        except Exception:
+            pass
+    return jsonify(result)
+
+
+@app.route("/api/gmail/fetch-body")
+@rate_limit()
+def api_gmail_fetch_body():
+    url_fragment = request.args.get("url", "")
+    if not url_fragment:
+        return jsonify({"ok": False, "body": ""}), 400
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).parent / "services/cdp_fetch.py"),
+             "fetch_body", url_fragment],
+            capture_output=True, text=True, timeout=25
+        )
+        result = json.loads(proc.stdout)
+    except Exception as e:
+        result = {"ok": False, "body": str(e)}
     return jsonify(result)
 
 
