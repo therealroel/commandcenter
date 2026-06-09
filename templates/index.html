@@ -56,7 +56,7 @@ body {
   line-height: 1.5;
   height: 100vh;
   display: grid;
-  /* rows: header · status-rail · docker-dock · claude-subs-dock · projects-strip · main(1fr) · footer */
+  /* rows: header · status-rail · docker-dock · claude-subs-dock · gmail-dock · workspace-dock(1fr) · footer */
   grid-template-rows: 52px auto auto auto auto 1fr 34px;
   overflow: hidden;
   letter-spacing: 0.02em;
@@ -348,18 +348,500 @@ body::after {
 
 /* ============= MAIN PANELS ============= */
 .main {
-  padding: 8px 16px;
+  padding: 8px 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   min-height: 0;
   position: relative;
   z-index: 4;
+  transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
 }
 .main[data-panels="1"] { grid-template-columns: 1fr; }
 .main[data-panels="2"] { grid-template-columns: 1fr 1fr; }
 .main[data-panels="3"] { grid-template-columns: 1fr 1fr 1fr; }
 .chat-panel[data-hidden="1"] { display: none; }
+
+.channels-dock {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 16px;
+}
+
+.channels-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  position: relative;
+}
+.channels-head:hover .channels-title { color: var(--text-secondary); }
+
+.channels-caret {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-dim);
+  transition: transform 0.2s ease, color 0.2s ease;
+  display: inline-block;
+}
+.channels-head:hover .channels-caret { color: var(--text-secondary); }
+.channels-dock.collapsed .channels-caret { transform: rotate(180deg); }
+
+.channels-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+.channels-summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.1em;
+}
+
+.channels-dock.collapsed .main,
+.channels-dock.collapsed .projects-strip {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+  min-height: 0;
+}
+
+/* ============= GMAIL DOCK ============= */
+.gmail-dock {
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,68,68,0.03), transparent);
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gmail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  min-height: 28px;
+}
+.gmail-head:hover .gmail-title { color: var(--text-secondary); }
+
+.gmail-caret {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-dim);
+  transition: transform 0.2s ease, color 0.2s ease;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.gmail-head:hover .gmail-caret { color: var(--text-secondary); }
+.gmail-dock.collapsed .gmail-caret { transform: rotate(180deg); }
+
+.gmail-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.gmail-title .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: var(--glow-green);
+  display: inline-block;
+}
+.gmail-title .dot.off { background: var(--text-dim); box-shadow: none; }
+.gmail-title .dot.alert { background: var(--red); box-shadow: var(--glow-red); animation: gmailPulse 1.5s ease-in-out infinite; }
+.gmail-title .dot.warn { background: var(--yellow); box-shadow: 0 0 6px rgba(255,170,0,0.6); }
+
+@keyframes gmailPulse {
+  0%, 100% { box-shadow: var(--glow-red); }
+  50% { box-shadow: 0 0 14px rgba(255,68,102,0.9); }
+}
+
+/* Tab strip */
+.gmail-tabs {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.gmail-tab-btn {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+  white-space: nowrap;
+}
+.gmail-tab-btn:hover { border-color: var(--border-bright); color: var(--text-secondary); }
+.gmail-tab-count {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  letter-spacing: 0;
+  min-width: 14px;
+  text-align: center;
+  display: inline-block;
+}
+.gmail-tab-btn[data-tab="high"].on { border-color: rgba(255,68,102,0.55); color: var(--red); background: rgba(255,68,102,0.08); }
+.gmail-tab-btn[data-tab="high"].on .gmail-tab-count { background: rgba(255,68,102,0.22); }
+.gmail-tab-btn[data-tab="action"].on { border-color: rgba(255,170,0,0.55); color: var(--yellow); background: rgba(255,170,0,0.08); }
+.gmail-tab-btn[data-tab="action"].on .gmail-tab-count { background: rgba(255,170,0,0.22); }
+.gmail-tab-btn[data-tab="feed"].on,
+.gmail-tab-btn[data-tab="cleanup"].on { border-color: var(--border-bright); color: var(--text-secondary); background: rgba(255,255,255,0.05); }
+
+.gmail-summary {
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.gmail-login-btn {
+  font-size: 9px;
+  color: var(--cyan);
+  background: rgba(0,217,255,0.08);
+  border: 1px solid rgba(0,217,255,0.3);
+  border-radius: 3px;
+  padding: 3px 10px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  transition: all 0.15s ease;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.gmail-login-btn:hover { background: rgba(0,217,255,0.18); border-color: var(--cyan); }
+
+/* Body — 2 col: email list | calendar */
+.gmail-body {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 8px;
+  max-height: 220px;
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+.gmail-dock.collapsed .gmail-body {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Email list panel */
+.gmail-emails {
+  overflow-y: auto;
+  max-height: 220px;
+  scrollbar-width: thin;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.gmail-emails::-webkit-scrollbar { width: 3px; }
+.gmail-emails::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* Sections — only the tab-active one is shown */
+.gmail-section { display: none; }
+.gmail-section.tab-active { display: block; }
+.gmail-section-head { display: none; }
+.gmail-section-body { }
+.gmail-section-count { }
+
+/* Compact 2-line email cards */
+.gmail-card {
+  padding: 6px 10px 6px 13px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  transition: background 0.1s ease;
+  cursor: default;
+  position: relative;
+}
+.gmail-card:last-child { border-bottom: none; }
+.gmail-card:hover { background: rgba(255,255,255,0.025); }
+.gmail-section.high .gmail-card { border-left-color: rgba(255,68,102,0.5); }
+.gmail-section.action .gmail-card { border-left-color: rgba(255,170,0,0.4); }
+.gmail-section.feed .gmail-card { border-left-color: var(--border); }
+
+.gmail-card-row1 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.gmail-card-row2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gmail-from {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.gmail-time {
+  font-size: 10px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+.gmail-subject {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* AI summary — shown only for HIGH/ACTION, dim italic below subject */
+.gmail-card .gmail-ai-summary {
+  display: none;
+}
+.gmail-section.high .gmail-card .gmail-ai-summary,
+.gmail-section.action .gmail-card .gmail-ai-summary {
+  display: block;
+  font-size: 10px;
+  color: var(--cyan-dim);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* Hover-reveal action buttons */
+.gmail-card-actions {
+  display: flex;
+  gap: 7px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.gmail-card:hover .gmail-card-actions { opacity: 1; pointer-events: auto; }
+.gmail-open-link {
+  font-size: 9px;
+  color: var(--cyan-dim);
+  text-decoration: none;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  transition: color 0.12s ease;
+  line-height: 1;
+}
+.gmail-open-link:hover { color: var(--cyan); }
+.gmail-delete-btn {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  transition: color 0.12s ease;
+  line-height: 1;
+}
+.gmail-delete-btn:hover { color: var(--red); }
+
+.gmail-cleanup-check {
+  accent-color: var(--cyan);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.gmail-cleanup-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  background: rgba(255,68,102,0.03);
+}
+.gmail-delete-all-btn {
+  font-size: 9px;
+  color: var(--red);
+  background: rgba(255,68,102,0.1);
+  border: 1px solid rgba(255,68,102,0.3);
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.1em;
+  transition: all 0.15s ease;
+  font-weight: 700;
+}
+.gmail-delete-all-btn:hover { background: rgba(255,68,102,0.2); border-color: var(--red); }
+
+.gmail-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 28px 12px;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+.gmail-flash { animation: gmailFlash 2s ease-in-out; }
+@keyframes gmailFlash {
+  0%, 100% { background: linear-gradient(180deg, rgba(255,68,68,0.03), transparent); }
+  25%, 75% { background: linear-gradient(180deg, rgba(255,68,102,0.15), transparent); }
+}
+
+/* ========== CALENDAR SIDEBAR ========== */
+.gmail-calendar {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--card);
+}
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0,217,255,0.03);
+  border-bottom: 1px solid var(--border);
+}
+.cal-title {
+  font-size: 10px;
+  color: var(--cyan);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.cal-date {
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-bright);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.cal-day-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  transition: all 0.12s ease;
+}
+.cal-day-btn:first-child { border-right: 1px solid var(--border); }
+.cal-day-btn:hover { color: var(--text-secondary); background: rgba(0,217,255,0.06); }
+.cal-day-btn.on { background: rgba(0,217,255,0.12); color: var(--cyan); }
+.cal-body {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.cal-body::-webkit-scrollbar { width: 3px; }
+.cal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.cal-event {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s ease;
+  align-items: flex-start;
+}
+.cal-event:last-child { border-bottom: none; }
+.cal-event:hover { background: rgba(0,217,255,0.03); }
+.cal-event-bar {
+  width: 3px;
+  min-height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: var(--cyan);
+  align-self: stretch;
+  margin-top: 2px;
+}
+.cal-event-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.cal-event-title {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-event-time {
+  font-size: 10px;
+  color: var(--cyan-dim);
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+.cal-event-location {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 28px 10px;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
 
 .chat-panel {
   background: linear-gradient(180deg, var(--card), var(--bg-2));
@@ -999,17 +1481,14 @@ body::after {
 .docker-head:hover .docker-title { color: var(--text-secondary); }
 
 .docker-caret {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1;
   color: var(--text-dim);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, color 0.2s ease;
   display: inline-block;
 }
 .docker-head:hover .docker-caret { color: var(--text-secondary); }
-.docker-dock.collapsed .docker-caret { transform: translateX(-50%) rotate(180deg); }
+.docker-dock.collapsed .docker-caret { transform: rotate(180deg); }
 
 .docker-title {
   font-size: 10px;
@@ -1231,17 +1710,14 @@ body::after {
 }
 
 .subs-caret {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1;
   color: var(--text-dim);
   transition: transform 0.2s ease, color 0.2s ease;
   display: inline-block;
 }
 .subs-head:hover .subs-caret { color: var(--text-secondary); }
-.subs-dock.collapsed .subs-caret { transform: translateX(-50%) rotate(180deg); }
+.subs-dock.collapsed .subs-caret { transform: rotate(180deg); }
 
 .subs-body {
   display: grid;
@@ -1429,10 +1905,6 @@ body::after {
   border-color: var(--green);
   box-shadow: 0 0 8px rgba(0,255,136,0.4);
 }
-/* AUTO sits on the left, then title + summary flow naturally; the caret is
-   absolutely centered (overlays, matching the CONTAINERS dock). */
-.subs-head .subs-caret { left: 50%; right: auto; transform: translateX(-50%); }
-.subs-dock.collapsed .subs-head .subs-caret { transform: translateX(-50%) rotate(180deg); }
 
 /* "None available" / status notice banner under the header. */
 .subs-notice {
@@ -1478,12 +1950,10 @@ body::after {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 16px 8px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(13,20,29,0.4), transparent);
+  padding: 6px 0 8px;
   overflow-x: auto;
   position: relative;
-  z-index: 5;
+  transition: max-height 0.2s ease, opacity 0.2s ease;
 }
 
 .projects-strip .strip-label {
@@ -2460,29 +2930,81 @@ body::after {
 <!-- ============= CLAUDE SUBS DOCK ============= -->
 <div class="subs-dock collapsed" id="subs-dock">
   <div class="subs-head" id="subs-head" role="button" tabindex="0" aria-expanded="false" title="Click to expand / collapse subscriptions">
+    <span class="subs-caret" id="subs-caret">&#9662;</span>
     <span class="subs-title">&#x1F9E0; CLAUDE SUBS <span class="dot" id="subs-dot"></span></span>
     <button class="subs-auto" id="subs-auto" type="button" title="Auto-switch the active account when it runs low on usage" aria-pressed="false">AUTO ⏻</button>
     <span class="subs-summary" id="subs-summary">scanning...</span>
-    <span class="subs-caret" id="subs-caret">&#9662;</span>
   </div>
   <div class="subs-notice" id="subs-notice" hidden></div>
   <div class="subs-body" id="subs-body"></div>
 </div>
 
-<!-- ============= PROJECTS STRIP ============= -->
-<div class="projects-strip">
-  <div class="strip-label">▣ PROJECTS</div>
-  <div class="layout-switch" id="layout-switch">
-    <button data-count="1">1</button>
-    <button data-count="2" class="on">2</button>
-    <button data-count="3">3</button>
+<!-- ============= GMAIL DOCK ============= -->
+<div class="gmail-dock" id="gmail-dock">
+  <div class="gmail-head" id="gmail-head" role="button" tabindex="0" aria-expanded="true" title="Click to collapse / expand Borsen inbox">
+    <span class="gmail-caret" id="gmail-caret">▾</span>
+    <span class="gmail-title">✉ BORSEN INBOX <span class="dot" id="gmail-dot"></span></span>
+    <div class="gmail-tabs" id="gmail-tabs">
+      <button class="gmail-tab-btn on" data-tab="high">HIGH <span class="gmail-tab-count" id="gmail-high-count">0</span></button>
+      <button class="gmail-tab-btn" data-tab="action">ACTION <span class="gmail-tab-count" id="gmail-action-count">0</span></button>
+      <button class="gmail-tab-btn" data-tab="feed">FEED <span class="gmail-tab-count" id="gmail-feed-count">0</span></button>
+      <button class="gmail-tab-btn" data-tab="cleanup">CLEANUP <span class="gmail-tab-count" id="gmail-cleanup-count">0</span></button>
+    </div>
+    <span class="gmail-summary" id="gmail-summary">connecting...</span>
+    <button class="gmail-login-btn" id="gmail-login-btn" style="display:none;" title="Open Gmail login page">LOGIN REQUIRED</button>
   </div>
-  <div class="strip-items" id="strip-items"></div>
-  <button class="strip-add" id="strip-add">＋ ADD PROJECT</button>
+  <div class="gmail-body" id="gmail-body">
+    <div class="gmail-emails" id="gmail-emails">
+      <div class="gmail-section high tab-active" id="gmail-high">
+        <div class="gmail-section-body" id="gmail-high-body"></div>
+      </div>
+      <div class="gmail-section action" id="gmail-action">
+        <div class="gmail-section-body" id="gmail-action-body"></div>
+      </div>
+      <div class="gmail-section feed" id="gmail-feed">
+        <div class="gmail-section-body" id="gmail-feed-body"></div>
+      </div>
+      <div class="gmail-section cleanup" id="gmail-cleanup">
+        <div class="gmail-section-body" id="gmail-cleanup-body"></div>
+        <div class="gmail-cleanup-bar" id="gmail-cleanup-bar" style="display:none;">
+          <span style="font-size:9px;color:var(--text-dim);">Select to delete</span>
+          <button class="gmail-delete-all-btn" id="gmail-delete-all">DELETE SELECTED</button>
+        </div>
+      </div>
+    </div>
+    <div class="gmail-calendar">
+      <div class="cal-head">
+        <span class="cal-title">CAL</span>
+        <span class="cal-date" id="cal-date">loading...</span>
+        <div class="cal-toggle">
+          <button class="cal-day-btn on" data-day="0">TODAY</button>
+          <button class="cal-day-btn" data-day="1">TMR</button>
+        </div>
+      </div>
+      <div class="cal-body" id="cal-body">
+        <div class="cal-empty">Loading events...</div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- ============= MAIN ============= -->
-<main class="main" data-panels="2">
+<!-- ============= WORKSPACE DOCK ============= -->
+<div class="channels-dock" id="channels-dock">
+  <div class="channels-head" id="channels-head" role="button" tabindex="0" aria-expanded="true" title="Click to collapse / expand workspace">
+    <span class="channels-caret" id="channels-caret">▾</span>
+    <span class="channels-title">◧ WORKSPACE</span>
+    <span class="channels-summary" id="channels-summary"></span>
+  </div>
+  <div class="projects-strip" id="projects-strip">
+    <div class="layout-switch" id="layout-switch">
+      <button data-count="1">1</button>
+      <button data-count="2" class="on">2</button>
+      <button data-count="3">3</button>
+    </div>
+    <div class="strip-items" id="strip-items"></div>
+    <button class="strip-add" id="strip-add">＋ ADD PROJECT</button>
+  </div>
+  <main class="main" data-panels="2">
   <div class="chat-panel" id="panel-0" tabindex="0">
     <div class="panel-header">
       <span class="panel-tag">CH 01</span>
@@ -2545,7 +3067,8 @@ body::after {
     </div>
     <div class="term-host" id="term-2" data-panel="2"></div>
   </div>
-</main>
+  </main>
+</div>
 
 <!-- ============= FOOTER ============= -->
 <footer class="footer">
@@ -4238,6 +4761,300 @@ body::after {
       const collapsed = card.classList.toggle('collapsed');
       try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {}
     });
+  })();
+
+  (function () {
+    const dock = document.getElementById('channels-dock');
+    const head = document.getElementById('channels-head');
+    if (!dock || !head) return;
+    const KEY = 'cc-channels-collapsed';
+    if (localStorage.getItem(KEY) === '1') dock.classList.add('collapsed');
+    head.setAttribute('aria-expanded', String(!dock.classList.contains('collapsed')));
+    function toggle() {
+      const collapsed = dock.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', String(!collapsed));
+      try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {}
+    }
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+  })();
+
+  (function () {
+    const dock = document.getElementById('gmail-dock');
+    const head = document.getElementById('gmail-head');
+    if (!dock || !head) return;
+    const KEY = 'cc-gmail-collapsed';
+    if (localStorage.getItem(KEY) === '1') dock.classList.add('collapsed');
+    head.setAttribute('aria-expanded', String(!dock.classList.contains('collapsed')));
+
+    function toggle() {
+      const collapsed = dock.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', String(!collapsed));
+      try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {}
+    }
+    head.addEventListener('click', (e) => {
+      if (e.target.closest('.gmail-tabs') || e.target.closest('.gmail-login-btn')) return;
+      toggle();
+    });
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+
+    // Tab switching
+    let userPickedTab = false;
+    function activateTab(tier) {
+      document.querySelectorAll('.gmail-tab-btn').forEach(b => b.classList.remove('on'));
+      document.querySelectorAll('.gmail-section').forEach(s => s.classList.remove('tab-active'));
+      const btn = document.querySelector(`.gmail-tab-btn[data-tab="${tier}"]`);
+      const section = document.getElementById(`gmail-${tier}`);
+      if (btn) btn.classList.add('on');
+      if (section) section.classList.add('tab-active');
+      const cleanupBar = document.getElementById('gmail-cleanup-bar');
+      if (cleanupBar) cleanupBar.style.display = tier === 'cleanup' ? '' : 'none';
+    }
+    document.querySelectorAll('.gmail-tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        userPickedTab = true;
+        activateTab(btn.dataset.tab);
+      });
+    });
+
+    const loginBtn = document.getElementById('gmail-login-btn');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.open('https://mail.google.com', '_blank');
+      });
+    }
+
+    const deleteAllBtn = document.getElementById('gmail-delete-all');
+    if (deleteAllBtn) {
+      deleteAllBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const checked = document.querySelectorAll('.gmail-cleanup-check:checked');
+        const ids = Array.from(checked).map(c => c.dataset.emailId);
+        const senders = Array.from(checked).map(c => {
+          const card = c.closest('.gmail-card');
+          const btn = card ? card.querySelector('.gmail-delete-btn') : null;
+          return btn ? btn.dataset.sender : '';
+        });
+        if (!ids.length) return;
+        if (!confirm(`Delete ${ids.length} email(s)?`)) return;
+        fetch('/api/gmail/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids, senders })
+        }).then(r => r.json()).then(() => {
+          ids.forEach(id => {
+            const card = document.querySelector(`.gmail-card[data-email-id="${id}"]`);
+            if (card) card.remove();
+          });
+        }).catch(() => {});
+      });
+    }
+
+    function makeCard(email, tier) {
+      const card = document.createElement('div');
+      card.className = 'gmail-card';
+      card.dataset.emailId = email.id;
+
+      const isCleanup = tier === 'cleanup';
+      const checkHtml = isCleanup
+        ? `<input type="checkbox" class="gmail-cleanup-check" data-email-id="${escapeHtml(email.id)}">`
+        : '';
+      const hasSummary = email.summary && email.summary !== email.subject;
+
+      card.innerHTML = `
+        <div class="gmail-card-row1">
+          ${checkHtml}
+          <span class="gmail-from" title="${escapeHtml(email.from)}">${escapeHtml(email.from_name || email.from)}</span>
+          <span class="gmail-time">${escapeHtml(email.time || '')}</span>
+        </div>
+        <div class="gmail-card-row2">
+          <span class="gmail-subject">${escapeHtml(email.subject)}</span>
+          <div class="gmail-card-actions">
+            ${email.url ? `<a class="gmail-open-link" href="https://mail.google.com${escapeHtml(email.url)}" target="_blank" rel="noopener" title="Open in Gmail">OPEN</a>` : ''}
+            <button class="gmail-delete-btn" data-email-id="${escapeHtml(email.id)}" data-sender="${escapeHtml(email.from)}" title="Delete">✕</button>
+          </div>
+        </div>
+        ${hasSummary ? `<div class="gmail-ai-summary">${escapeHtml(email.summary)}</div>` : ''}
+      `;
+
+      card.querySelector('.gmail-delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = e.currentTarget.dataset.emailId;
+        const sender = e.currentTarget.dataset.sender;
+        fetch('/api/gmail/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [id], senders: [sender] })
+        }).then(r => r.json()).then(() => {
+          card.style.opacity = '0';
+          card.style.transition = 'opacity 0.25s ease';
+          setTimeout(() => card.remove(), 250);
+        }).catch(() => {});
+      });
+
+      return card;
+    }
+
+    let alertSound = null;
+    try {
+      alertSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGS57OihUBELTKXh8bllHAU2j9XzzHksBSJ0xPDekEELFF+z6OyoVRQKRp/g8r5sIQUrgc7y2Yk2CBhku+3ooVARC0yl4fG5ZRwFNo/V88x5LAUidMTw3pBBCxRfs+jsqFUUCkaf4PK+bCEFK4HO8tmJNggYZLvt6KFQEQxMpeHxuWUcBTaP1fPMeSwFInTE8N6QQQsUX7Po7KhVFApGn+DyvmwhBSuBzvLZiTYIGGS77eihUBEMTKXh8bllHAU2j9XzzHksBSJ0xPDekEELFF+z6OyoVRQKRp/g8r5sIQUrgc7y2Yk2CBhku+3ooVARDEyl4fG5ZRwFNo/V88x5LAUidMTw3pBBCxRfs+jsqFUUCkaf4PK+bCEFK4HO8tmJNggYZLvt6KFQEQxMpeHxuWUcBTaP1fPMeSwFInTE8N6Q==');
+    } catch (_) {}
+
+    function playAlert() {
+      if (alertSound) {
+        try { alertSound.currentTime = 0; alertSound.play().catch(() => {}); } catch (_) {}
+      }
+    }
+
+    function renderSection(prefix, emails) {
+      const countEl = document.getElementById(`${prefix}-count`);
+      const bodyEl = document.getElementById(`${prefix}-body`);
+      if (!countEl || !bodyEl) return;
+
+      countEl.textContent = emails.length;
+      bodyEl.innerHTML = '';
+
+      if (!emails.length) {
+        bodyEl.innerHTML = '<div class="gmail-empty">Nothing here</div>';
+        return;
+      }
+
+      const tier = prefix.replace('gmail-', '');
+      emails.forEach(email => bodyEl.appendChild(makeCard(email, tier)));
+    }
+
+    socket.on('gmail_update', (data) => {
+      const dot = document.getElementById('gmail-dot');
+      const summary = document.getElementById('gmail-summary');
+      if (!dot || !summary) return;
+
+      if (data.needs_login) {
+        dot.className = 'dot warn';
+        summary.textContent = 'login required';
+        const lb = document.getElementById('gmail-login-btn');
+        if (lb) lb.style.display = '';
+        return;
+      }
+      const lb = document.getElementById('gmail-login-btn');
+      if (lb) lb.style.display = 'none';
+
+      if (!data.available) {
+        dot.className = 'dot off';
+        summary.textContent = data.summary || 'offline';
+        return;
+      }
+
+      const hasHigh = (data.high || []).length > 0;
+      const hasAction = (data.action || []).length > 0;
+      dot.className = hasHigh ? 'dot alert' : (hasAction ? 'dot warn' : 'dot');
+      summary.textContent = data.summary || 'inbox clear';
+
+      renderSection('gmail-high', data.high || []);
+      renderSection('gmail-action', data.action || []);
+      renderSection('gmail-feed', data.feed || []);
+      renderSection('gmail-cleanup', data.cleanup || []);
+
+      // Auto-switch tab to most urgent tier (unless user has picked one)
+      if (!userPickedTab) {
+        if (hasHigh) activateTab('high');
+        else if (hasAction) activateTab('action');
+        else activateTab('high');
+      }
+    });
+
+    socket.on('gmail_alert', (data) => {
+      playAlert();
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`✉ ${data.from}`, {
+            body: `${data.subject}\n${data.snippet || ''}`,
+            tag: `gmail-${data.email_id}`,
+          });
+        }
+      } catch (_) {}
+
+      if (dock.classList.contains('collapsed')) {
+        dock.classList.remove('collapsed');
+        head.setAttribute('aria-expanded', 'true');
+        try { localStorage.setItem(KEY, '0'); } catch (_) {}
+      }
+      activateTab('high');
+      userPickedTab = false;
+
+      dock.classList.add('gmail-flash');
+      setTimeout(() => dock.classList.remove('gmail-flash'), 2500);
+    });
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      head.addEventListener('click', () => Notification.requestPermission().catch(() => {}), { once: true });
+    }
+
+    // ---- Calendar ----
+    let currentCalDay = 0;
+    document.querySelectorAll('.cal-day-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.cal-day-btn').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        currentCalDay = parseInt(btn.dataset.day);
+        fetchCalendar(currentCalDay);
+      });
+    });
+
+    function fetchCalendar(dayOffset) {
+      fetch(`/api/calendar?day=${dayOffset}`)
+        .then(r => r.json())
+        .then(data => renderCalendar(data))
+        .catch(() => {});
+    }
+
+    function renderCalendar(data) {
+      const body = document.getElementById('cal-body');
+      const dateEl = document.getElementById('cal-date');
+      if (!body) return;
+      if (data.date && dateEl) dateEl.textContent = data.date;
+
+      if (data.needs_login) {
+        body.innerHTML = '<div class="cal-empty">Login required</div>';
+        return;
+      }
+      if (!data.available) {
+        body.innerHTML = `<div class="cal-empty">${escapeHtml(data.summary || 'offline')}</div>`;
+        return;
+      }
+      const events = data.events || [];
+      if (!events.length) {
+        body.innerHTML = '<div class="cal-empty">No events</div>';
+        return;
+      }
+      body.innerHTML = '';
+      events.forEach(ev => {
+        const el = document.createElement('div');
+        el.className = 'cal-event';
+        const barColor = ev.color || 'var(--cyan)';
+        el.innerHTML = `
+          <div class="cal-event-bar" style="background:${barColor}"></div>
+          <div class="cal-event-info">
+            <span class="cal-event-title">${escapeHtml(ev.title)}</span>
+            ${ev.time ? `<span class="cal-event-time">${escapeHtml(ev.time)}</span>` : ''}
+            ${ev.location ? `<span class="cal-event-location">${escapeHtml(ev.location)}</span>` : ''}
+          </div>
+        `;
+        body.appendChild(el);
+      });
+    }
+
+    socket.on('calendar_update', (data) => {
+      if (currentCalDay === 0) renderCalendar(data);
+    });
+
+    fetchCalendar(0);
   })();
 
   function renderAgents(data) {

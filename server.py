@@ -28,6 +28,8 @@ from services.weather import WeatherService
 from services.git import GitService
 from services.docker import DockerService
 from services.claude_subs import ClaudeSubsService
+from services.gmail import GmailService
+from services.calendar import CalendarService
 
 # ============================================================================
 # LOGGING SETUP - Structured logging instead of print() statements
@@ -112,6 +114,8 @@ weather_service = WeatherService(os.environ.get("CC_WEATHER_CITY", "Copenhagen")
 git_service = GitService()
 docker_service = DockerService()
 claude_subs_service = ClaudeSubsService()
+gmail_service = GmailService()
+calendar_service = CalendarService()
 
 # Per-panel state -----------------------------------------------------------
 # sid -> { panel_id: {bridge, project, agent} }
@@ -857,6 +861,46 @@ def api_claude_subs_autoswitch():
     return jsonify({"enabled": bool(settings.get("claude_autoswitch", False))})
 
 
+@app.route("/api/gmail/status")
+@rate_limit()
+def api_gmail_status():
+    return jsonify(gmail_service.get_status())
+
+@app.route("/api/gmail/delete", methods=["POST"])
+@rate_limit()
+def api_gmail_delete():
+    data = request.get_json(force=True, silent=True) or {}
+    ids = data.get("ids", [])
+    senders = data.get("senders", [])
+    if not ids:
+        return jsonify({"ok": False, "error": "no ids"}), 400
+    result = gmail_service.delete_emails(ids)
+    if result.get("ok"):
+        for i, eid in enumerate(ids):
+            sender = senders[i] if i < len(senders) else ""
+            gmail_service.record_deletion(sender, "")
+    return jsonify(result)
+
+@app.route("/api/gmail/seen", methods=["POST"])
+@rate_limit()
+def api_gmail_seen():
+    data = request.get_json(force=True, silent=True) or {}
+    ids = data.get("ids", [])
+    return jsonify(gmail_service.mark_seen(ids))
+
+
+@app.route("/api/calendar")
+@rate_limit()
+def api_calendar():
+    day_offset = int(request.args.get("day", 0))
+    return jsonify(calendar_service.get_events(day_offset))
+
+@app.route("/api/calendar/status")
+@rate_limit()
+def api_calendar_status():
+    return jsonify(calendar_service.get_status())
+
+
 @app.route("/api/agents")
 @rate_limit()
 def api_agents():
@@ -1285,6 +1329,36 @@ def docker_thread():
         except Exception as exc:
             logger.warning(f"docker_thread error: {exc}")
         gevent.sleep(5)
+
+
+def gmail_thread():
+    logger.info("THREAD_START: gmail_thread")
+    while True:
+        try:
+            data = gmail_service.get_emails()
+            socketio.emit("gmail_update", data)
+            if data.get("new_high"):
+                for email in data["new_high"]:
+                    socketio.emit("gmail_alert", {
+                        "email_id": email["id"],
+                        "from": email.get("from_name", email.get("from", "")),
+                        "subject": email.get("subject", ""),
+                        "snippet": email.get("snippet", "")
+                    })
+        except Exception as exc:
+            logger.warning(f"gmail_thread error: {exc}")
+        gevent.sleep(300)
+
+
+def calendar_thread():
+    logger.info("THREAD_START: calendar_thread")
+    while True:
+        try:
+            data = calendar_service.get_events()
+            socketio.emit("calendar_update", data)
+        except Exception as exc:
+            logger.warning(f"calendar_thread error: {exc}")
+        gevent.sleep(300)
 
 
 # Live tmux session names look like: cc-<project>-<panel>-<agent>
@@ -1926,6 +2000,10 @@ if __name__ == "__main__":
     logger.info("  -> claude_subs_thread started")
     socketio.start_background_task(git_thread)
     logger.info("  -> git_thread started")
+    socketio.start_background_task(gmail_thread)
+    logger.info("  -> gmail_thread started")
+    socketio.start_background_task(calendar_thread)
+    logger.info("  -> calendar_thread started")
     socketio.start_background_task(tmux_janitor)
     logger.info("  -> tmux_janitor started")
     logger.info("ALL threads launched, starting server...")
