@@ -811,6 +811,18 @@ def api_version():
     return jsonify({"version": __version__, "git": git_hash})
 
 
+@app.route("/api/restart", methods=["POST"])
+def api_restart():
+    """Restart the server process in-place (os.execv)."""
+    logger.info("api_restart: manual restart requested")
+    socketio.emit("server_restart", {"hash": "manual", "reason": "manual restart"})
+    def _do_restart():
+        gevent.sleep(0.8)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    gevent.spawn(_do_restart)
+    return jsonify({"ok": True, "msg": "restarting"})
+
+
 @app.route("/api/docker")
 @rate_limit()
 def api_docker():

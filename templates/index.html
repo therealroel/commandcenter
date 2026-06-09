@@ -1278,6 +1278,23 @@ body::after {
   gap: 14px;
 }
 
+.footer-restart {
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.footer-restart:hover { color: var(--cyan); border-color: var(--cyan-dim); }
+.footer-restart:active, .footer-restart.restarting { color: var(--yellow); border-color: var(--yellow); pointer-events: none; }
+
 .footer::before {
   content: '';
   position: absolute;
@@ -3118,6 +3135,7 @@ body::after {
     <span id="tmux-icon" style="color:var(--green);">●</span><span id="tmux-label" style="color:var(--green);">TMUX</span>
     <span id="server-icon" style="color:var(--green);">●</span><span id="server-label" style="color:var(--green);">SRV</span>
     <span id="footer-version">v{{ version }}</span>
+    <button class="footer-restart" id="footer-restart-btn" title="Restart server">⟳ RST</button>
   </div>
 </footer>
 
@@ -5550,8 +5568,17 @@ body::after {
   });
 
   socket.on('server_restart', function(data) {
-    console.log('Server restarting for new version:', data.hash);
+    console.log('Server restarting:', data.reason || data.hash);
     setTimeout(function() { window.location.reload(); }, 2000);
+  });
+
+  document.getElementById('footer-restart-btn').addEventListener('click', function() {
+    const btn = this;
+    btn.textContent = '⟳ …';
+    btn.classList.add('restarting');
+    fetch('/api/restart', { method: 'POST' }).catch(() => {});
+    // reload after disconnect + reconnect window
+    setTimeout(function() { window.location.reload(); }, 3500);
   });
 
   // Tint the EVENTS card by the severity of the most recent event:
