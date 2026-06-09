@@ -37,7 +37,7 @@ def fetch_gmail():
     if not ws_url:
         ws_url = open_tab('https://mail.google.com/mail/u/0/')
         if not ws_url:
-            return {"available": False, "needs_login": False, "high": [], "action": [], "feed": [], "cleanup": [], "summary": "cannot open gmail", "new_high": []}
+            return {"available": False, "needs_login": False, "emails": [], "summary": "cannot open gmail"}
         time.sleep(8)
 
     with sync_playwright() as p:
@@ -50,11 +50,10 @@ def fetch_gmail():
                 break
 
         if not page:
-            return {"available": False, "needs_login": False, "high": [], "action": [], "feed": [], "cleanup": [], "summary": "gmail tab lost", "new_high": []}
+            return {"available": False, "needs_login": False, "emails": [], "summary": "gmail tab lost"}
 
-        url = page.url
-        if any(x in url for x in ['accounts.google.com', 'onelogin.com', 'login.microsoftonline.com']):
-            return {"available": False, "needs_login": True, "login_url": url, "high": [], "action": [], "feed": [], "cleanup": [], "summary": "login required", "new_high": []}
+        if any(x in page.url for x in ['accounts.google.com', 'onelogin.com', 'login.microsoftonline.com']):
+            return {"available": False, "needs_login": True, "login_url": page.url, "emails": [], "summary": "login required"}
 
         page.wait_for_timeout(2000)
 
@@ -67,12 +66,30 @@ def fetch_gmail():
                 const fromEl = row.querySelector('.yX span[email]');
                 const subjectEl = row.querySelector('.y6 span') || row.querySelector('.bog span');
                 const timeEl = row.querySelector('.xW span[title]');
-                const linkEl = row.querySelector('a[href*="#inbox/"]');
                 if (!fromEl) continue;
-                const emailId = row.getAttribute('data-id') || (linkEl ? linkEl.getAttribute('href').split('/').pop() : `row-${i}`);
+
+                // Extract thread ID from jslog base64 — e.g. ["#thread-f:1867516551939425413",...]
+                const jslog = row.getAttribute('jslog') || '';
+                const b64match = jslog.match(/(?:^|;\\s*)1:([A-Za-z0-9+/]+)/);
+                const b64 = b64match ? b64match[1] : '';
+                let threadId = '';
+                let urlFragment = '';
+                try {
+                    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+                    const decoded = atob(padded);
+                    const m = decoded.match(/"#thread-f:([0-9]+)"/);
+                    if (m) {
+                        threadId = m[1];
+                        // Convert decimal thread ID to hex for Gmail URL
+                        urlFragment = '/mail/u/0/#inbox/' + BigInt(m[1]).toString(16).toUpperCase();
+                    }
+                } catch(e) {}
+
+                const emailId = threadId || row.getAttribute('id') || `row-${i}`;
                 const allText = row.innerText || '';
                 const lines = allText.split('\\n').map(l => l.trim()).filter(l => l && l !== '-');
                 const recipients = lines.length > 1 ? lines[0] : '';
+
                 results.push({
                     id: emailId,
                     from: fromEl.getAttribute('email') || fromEl.textContent.trim(),
@@ -83,7 +100,7 @@ def fetch_gmail():
                     allText: allText.substring(0, 500),
                     time: timeEl ? (timeEl.getAttribute('title') || timeEl.textContent.trim()) : '',
                     unread: isUnread,
-                    url: linkEl ? linkEl.getAttribute('href') : ''
+                    url: urlFragment,
                 });
             }
             return results;
@@ -91,17 +108,20 @@ def fetch_gmail():
 
         return {"available": True, "needs_login": False, "emails": emails, "summary": f"{len(emails)} emails"}
 
+
 def fetch_calendar(day_offset=0):
     from datetime import datetime, timedelta
     from playwright.sync_api import sync_playwright
 
     target_date = datetime.now() + timedelta(days=day_offset)
+    date_str = target_date.strftime("%A, %b %d")
+    date_path = target_date.strftime("%Y/%m/%d")
 
     ws_url = find_tab('calendar.google.com')
     if not ws_url:
-        ws_url = open_tab('https://calendar.google.com/calendar/r')
+        ws_url = open_tab(f'https://calendar.google.com/calendar/r/day/{date_path}')
         if not ws_url:
-            return {"available": False, "needs_login": False, "events": [], "summary": "cannot open calendar", "date": target_date.strftime("%A, %B %d")}
+            return {"available": False, "needs_login": False, "events": [], "summary": "cannot open calendar", "date": date_str}
         time.sleep(6)
 
     with sync_playwright() as p:
@@ -114,44 +134,70 @@ def fetch_calendar(day_offset=0):
                 break
 
         if not page:
-            return {"available": False, "needs_login": False, "events": [], "summary": "calendar tab lost", "date": target_date.strftime("%A, %B %d")}
+            return {"available": False, "needs_login": False, "events": [], "summary": "calendar tab lost", "date": date_str}
 
-        url = page.url
-        if any(x in url for x in ['accounts.google.com', 'onelogin.com', 'login.microsoftonline.com']):
-            return {"available": False, "needs_login": True, "events": [], "summary": "login required", "date": target_date.strftime("%A, %B %d")}
+        if any(x in page.url for x in ['accounts.google.com', 'onelogin.com', 'login.microsoftonline.com']):
+            return {"available": False, "needs_login": True, "events": [], "summary": "login required", "date": date_str}
 
-        if day_offset == 1:
-            try:
-                page.goto(f'https://calendar.google.com/calendar/r/day/{target_date.strftime("%Y/%m/%d")}', timeout=10000)
-                page.wait_for_timeout(2000)
-            except Exception:
-                pass
-        else:
-            try:
-                page.goto('https://calendar.google.com/calendar/r', timeout=10000)
-                page.wait_for_timeout(2000)
-            except Exception:
-                pass
+        # Always navigate to the specific day view
+        try:
+            page.goto(f'https://calendar.google.com/calendar/r/day/{date_path}', timeout=12000)
+            page.wait_for_timeout(2000)
+        except Exception:
+            pass
 
         events = page.evaluate('''() => {
-            const eventEls = document.querySelectorAll('[data-eventid], .EfQccc, .FAxxKc');
+            // [data-eventid] is the confirmed working selector for event chips
+            const eventEls = document.querySelectorAll('[data-eventid]');
+            const seen = new Set();
             const results = [];
+
             eventEls.forEach(el => {
-                const titleEl = el.querySelector('.lhydbb, .gVNoLb, [data-event-title]') || el;
-                const timeEl = el.querySelector('.gVNoLb.EiZ8Zd, .SuAnhb');
-                const locationEl = el.querySelector('.IE3WHd, [data-event-location]');
-                const title = titleEl ? titleEl.textContent.trim() : '';
-                const time = timeEl ? timeEl.textContent.trim() : '';
-                const location = locationEl ? locationEl.textContent.trim() : '';
-                if (title && title !== 'No events') {
-                    const bgColor = window.getComputedStyle(el).backgroundColor;
-                    results.push({ title, time, location, color: bgColor });
+                const rawText = el.textContent.trim();
+                if (!rawText || rawText === 'No events') return;
+
+                // Deduplicate by raw text
+                if (seen.has(rawText)) return;
+                seen.add(rawText);
+
+                // Parse format: "9:15am to 9:30am, Title, Person, ..."
+                // or all-day: "TitleAll day, Title, Calendar, ..."
+                let title = '', time_str = '';
+
+                if (rawText.includes('All day,')) {
+                    time_str = 'All day';
+                    const afterAllDay = rawText.split('All day,')[1] || '';
+                    title = afterAllDay.split(',')[0].trim();
+                } else {
+                    const parts = rawText.split(', ');
+                    // First part looks like a time range if it contains am/pm
+                    if (parts[0] && /[0-9]/.test(parts[0]) && /(am|pm)/i.test(parts[0])) {
+                        time_str = parts[0].trim();
+                        title = parts[1] ? parts[1].trim() : rawText;
+                    } else {
+                        title = parts[0].trim();
+                    }
                 }
+
+                if (!title) return;
+
+                // Try to get background color from the chip or its parent
+                let color = '';
+                try {
+                    const chip = el.querySelector('[style*="background"]') || el;
+                    const bg = window.getComputedStyle(chip).backgroundColor;
+                    if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') color = bg;
+                } catch(e) {}
+
+                results.push({ title, time: time_str, location: '', color });
             });
+
             return results;
         }''')
 
-        return {"available": True, "needs_login": False, "events": events, "summary": f"{len(events)} events" if events else "no events", "date": target_date.strftime("%A, %B %d")}
+        summary = f"{len(events)} event{'s' if len(events) != 1 else ''}" if events else "no events"
+        return {"available": True, "needs_login": False, "events": events, "summary": summary, "date": date_str}
+
 
 def delete_emails(email_ids):
     from playwright.sync_api import sync_playwright
@@ -172,22 +218,30 @@ def delete_emails(email_ids):
         if not page:
             return {"ok": False, "error": "gmail tab lost"}
 
-        deleted = 0
-        for eid in email_ids:
-            try:
-                row = page.query_selector(f'tr[data-id="{eid}"]')
-                if row:
-                    checkbox = row.query_selector('.oZ-x3')
-                    if checkbox:
-                        checkbox.click()
-                        page.wait_for_timeout(300)
-                        deleted += 1
-            except Exception:
-                pass
+        # Find and select each row by matching thread ID in jslog
+        deleted = page.evaluate('''(emailIds) => {
+            const rows = document.querySelectorAll('tr.zA');
+            let selected = 0;
+            for (const eid of emailIds) {
+                const row = Array.from(rows).find(r => {
+                    const jslog = r.getAttribute('jslog') || '';
+                    const b64 = (jslog.match(/(?:^|;\\s*)1:([A-Za-z0-9+/]+)/)?.[1] || '');
+                    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+                    try { return atob(padded).includes(`"#thread-f:${eid}"`); }
+                    catch(e) { return false; }
+                });
+                if (!row) continue;
+                // Click the row's checkbox area (works via the hover-reveal checkbox)
+                const checkbox = row.querySelector('.oZ-x3') || row.querySelector('[role="checkbox"]');
+                if (checkbox) { checkbox.click(); selected++; }
+            }
+            return selected;
+        }''', email_ids)
 
         if deleted > 0:
+            page.wait_for_timeout(500)
             try:
-                delete_btn = page.query_selector('[data-tooltip="Delete"]')
+                delete_btn = page.query_selector('[data-tooltip="Delete"], [aria-label="Delete"]')
                 if delete_btn:
                     delete_btn.click()
                     page.wait_for_timeout(1000)
