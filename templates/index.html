@@ -436,12 +436,14 @@ body::after {
   box-sizing: border-box;
 }
 
-/* Collapsed dock: shrink to header width, share the row */
+/* Collapsed dock: shrink to header width, share the row.
+   order:-1 floats ALL collapsed docks to the top regardless of DOM order. */
 #top-dock-row .docker-dock.collapsed,
 #top-dock-row .subs-dock.collapsed,
 #top-dock-row .gmail-dock.collapsed {
   flex: 1 1 auto;
   min-width: 160px;
+  order: -1;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
