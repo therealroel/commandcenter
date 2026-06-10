@@ -17,9 +17,10 @@ Rules derived from bugs found and fixed in production. Every rule has a **Why** 
 **Why:** `height: 100%` on `.gmail-head`, `.docker-head`, or `.subs-head` inside a flex-column dock consumes the full dock height, leaving `0px` for the body. The terminal/email content becomes invisible.
 **Rule:** Dock heads use natural height (content-driven). Only `min-height` is allowed.
 
-### Collapsed docks share one flex row
-Collapsed state: `flex: 1 1 auto; max-width: 50%; order: -1` inside `#top-dock-row`.
-**Why:** Without `order: -1`, collapsed docks sort by DOM order — if the expanded dock comes first, collapsed ones wrap to a new row instead of sharing the top row.
+### Collapsed docks share one flex row — use `flex: 1 1 0%`, no `max-width`
+Collapsed state: `flex: 1 1 0%; order: -1` inside `#top-dock-row`.
+**Why:** `flex: 1 1 0%` (basis=0) forces equal distribution: 2 collapsed→50% each, 3 collapsed→33% each, all on one row. `max-width: 50%` looks correct for 2 docks but breaks with 3 — the third item can't fit and wraps to its own row.
+**Why `order: -1`:** Without it, collapsed docks sort by DOM order — if an expanded dock comes first, collapsed ones wrap to a new row instead of sharing the top row.
 
 ### Panel project names must truncate, not wrap
 `.panel-project { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0 }`
@@ -90,6 +91,13 @@ Frontend holds `calCache = {0: null, 1: null}` — tab click uses cache instantl
 **Why:** New meeting invites arrive in Gmail before they appear in calendar; polling alone creates a stale-calendar UX.
 
 ---
+
+### Overlays and dropdowns must escape `overflow:hidden` and xterm stacking
+Any popup (dropdown, tooltip, context menu) that can appear inside a panel must:
+- Append to `document.body`, NOT to the trigger element
+- Use `position: fixed` with `z-index: 9999`
+- Position via `trigger.getBoundingClientRect()` at open time
+**Why:** `.panel-header { overflow: hidden }` clips children that extend below the header. xterm.js canvas elements create their own stacking context that defeats `z-index < 1000` even on `position: absolute` siblings.
 
 ## Subagent Safety Rules
 
