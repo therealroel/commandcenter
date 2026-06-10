@@ -1772,8 +1772,8 @@ def handle_connect():
     if _calendar_cache:
         try:
             today = _calendar_cache.get("0") or {}
-        tmr = _calendar_cache.get("1") or {}
-        socketio.emit("calendar_update", {"today": today, "tmr": tmr}, to=request.sid)
+            tmr = _calendar_cache.get("1") or {}
+            socketio.emit("calendar_update", {"today": today, "tmr": tmr}, to=request.sid)
         except Exception as e:
             logger.warning(f"socket calendar cache on connect failed: {e}")
 
