@@ -1854,7 +1854,7 @@ def handle_term_open(data):
     session = f"cc-{safe_project}-{panel}-{agent_cmd}"
 
     # fnm (node version manager) setup for codex
-    fnm_setup = 'export PATH="$HOME/.local/share/fnm:$PATH"; eval "$(fnm env 2>/dev/null)" 2>/dev/null;'
+    fnm_setup = 'export PATH="$HOME/.opencode/bin:$HOME/.local/share/fnm:$PATH"; eval "$(fnm env 2>/dev/null)" 2>/dev/null;'
 
     if tmux.is_available():
         # Resume the session if it already exists (page refresh / reconnect keeps
@@ -1866,7 +1866,7 @@ def handle_term_open(data):
             f"{fnm_setup} cd {safe_cwd} && "
             f"(tmux has-session -t {session!r} 2>/dev/null && exec tmux attach-session -t {session!r} || "
             f"(command -v {agent_cmd} >/dev/null && "
-            f"exec tmux new-session -s {session!r} -n {agent_cmd!r} 'while command -v {agent_cmd} >/dev/null 2>&1; do {agent_cmd}; sleep 1; done' || "
+            f"exec tmux new-session -s {session!r} -n {agent_cmd!r} bash -lc 'while command -v {agent_cmd} >/dev/null 2>&1; do {agent_cmd}; sleep 1; done' || "
             f"exec bash -i))"
         )
     else:
