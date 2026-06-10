@@ -436,15 +436,15 @@ body::after {
   box-sizing: border-box;
 }
 
-/* Collapsed dock: share one row regardless of DOM order.
-   flex-basis:0 makes all three grow equally from zero (avoids content-size wrapping).
-   order:-1 floats ALL collapsed docks to the top regardless of DOM order. */
+/* Collapsed dock: all share one row regardless of DOM order.
+   flex: 1 1 0% (basis=0) forces equal width from zero — 2 docks→50% each,
+   3 docks→33% each. No max-width so a third never wraps to its own row.
+   order:-1 floats ALL collapsed docks before expanded ones regardless of DOM order. */
 #top-dock-row .docker-dock.collapsed,
 #top-dock-row .subs-dock.collapsed,
 #top-dock-row .gmail-dock.collapsed {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
-  max-width: 50%;
   overflow: hidden;
   order: -1;
   padding-bottom: 5px;
@@ -2696,15 +2696,12 @@ body::after {
 
 /* ============= AGENT DROPDOWN ============= */
 .agent-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
+  position: fixed;
   background: var(--card);
   border: 1px solid var(--cyan-dim);
   border-radius: 4px;
   box-shadow: 0 4px 20px rgba(0,217,255,0.2);
-  z-index: 100;
+  z-index: 9999;
   min-width: 140px;
   display: none;
   overflow: hidden;
@@ -5940,30 +5937,32 @@ body::after {
   }
 
   /* ===== AGENT DROPDOWN ===== */
+  // Dropdowns live in document.body (position:fixed) so they clear the xterm
+  // canvas stacking context and panel-header overflow:hidden.
   let openDropdown = null;
+  const _dropdowns = {};
 
   function createDropdown(panelId) {
-    const btn = document.getElementById(`agent-btn-${panelId}`);
-    let dropdown = btn.querySelector('.agent-dropdown');
-    if (!dropdown) {
-      dropdown = document.createElement('div');
-      dropdown.className = 'agent-dropdown';
-      dropdown.innerHTML = AGENTS.map((a, idx) => `
-        <div class="agent-dropdown-item" data-idx="${idx}">
-          <span class="dot ${a.cls}"></span>
-          <span>${a.name}</span>
-        </div>
-      `).join('');
-      btn.appendChild(dropdown);
-      dropdown.addEventListener('click', (e) => {
-        const item = e.target.closest('.agent-dropdown-item');
-        if (!item) return;
-        e.stopPropagation();
-        const idx = parseInt(item.dataset.idx);
-        selectAgent(panelId, idx);
-        closeDropdown();
-      });
-    }
+    if (_dropdowns[panelId]) return _dropdowns[panelId];
+    const dropdown = document.createElement('div');
+    dropdown.className = 'agent-dropdown';
+    dropdown.dataset.panel = panelId;
+    dropdown.innerHTML = AGENTS.map((a, idx) => `
+      <div class="agent-dropdown-item" data-idx="${idx}">
+        <span class="dot ${a.cls}"></span>
+        <span>${a.name}</span>
+      </div>
+    `).join('');
+    document.body.appendChild(dropdown);
+    dropdown.addEventListener('click', (e) => {
+      const item = e.target.closest('.agent-dropdown-item');
+      if (!item) return;
+      e.stopPropagation();
+      const idx = parseInt(item.dataset.idx);
+      selectAgent(panelId, idx);
+      closeDropdown();
+    });
+    _dropdowns[panelId] = dropdown;
     return dropdown;
   }
 
@@ -5972,9 +5971,15 @@ body::after {
     if (openDropdown && openDropdown !== dropdown) {
       openDropdown.classList.remove('open');
     }
-    const isOpen = dropdown.classList.toggle('open');
+    const isOpen = !dropdown.classList.contains('open');
+    dropdown.classList.toggle('open', isOpen);
     openDropdown = isOpen ? dropdown : null;
     if (isOpen) {
+      // Position below the agent button via fixed coords
+      const btn = document.getElementById(`agent-btn-${panelId}`);
+      const rect = btn.getBoundingClientRect();
+      dropdown.style.top = `${rect.bottom + 4}px`;
+      dropdown.style.left = `${rect.left}px`;
       // Mark current agent as active
       const currentIdx = panels[panelId].agentIdx;
       dropdown.querySelectorAll('.agent-dropdown-item').forEach((item, idx) => {
