@@ -486,7 +486,6 @@ body::after {
   cursor: pointer;
   user-select: none;
   min-height: 28px;
-  height: 100%;
 }
 .gmail-head:hover .gmail-title { color: var(--text-secondary); }
 
@@ -1214,8 +1213,10 @@ body::after {
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
   background: rgba(13,20,29,0.6);
 }
 
@@ -1256,6 +1257,11 @@ body::after {
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
 
 .panel-agent-name {
@@ -1737,7 +1743,6 @@ body::after {
   cursor: pointer;
   user-select: none;
   position: relative;
-  height: 100%;
 }
 .docker-head:hover .docker-title { color: var(--text-secondary); }
 
@@ -1941,7 +1946,6 @@ body::after {
   cursor: pointer;
   user-select: none;
   position: relative;
-  height: 100%;
 }
 .subs-head:hover .subs-title { color: var(--text-secondary); }
 
