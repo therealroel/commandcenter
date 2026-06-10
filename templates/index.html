@@ -465,6 +465,10 @@ body::after {
 #top-dock-row .gmail-dock.collapsed .gmail-loading-bar {
   display: none;
 }
+/* When collapsed, summary floats left like other docks' status text */
+#top-dock-row .gmail-dock.collapsed .gmail-summary {
+  margin-left: 0;
+}
 
 /* ============= GMAIL DOCK ============= */
 .gmail-dock {
@@ -5012,6 +5016,23 @@ body::after {
     Object.values(terms).forEach(t => { try { t.fit.fit(); } catch (e) {} });
     Object.values(bashTerms).forEach(t => { try { t.fit.fit(); } catch (e) {} });
   });
+
+  // refit whenever the terminal host changes size (dock expand/collapse, layout switch)
+  if (typeof ResizeObserver !== 'undefined') {
+    const termRO = new ResizeObserver(() => {
+      Object.keys(terms).forEach(pid => {
+        const host = document.getElementById(`term-${pid}`);
+        if (!host || host.offsetWidth === 0) return;
+        try { terms[pid].fit.fit(); } catch (e) {}
+      });
+      Object.keys(bashTerms).forEach(pid => {
+        const host = document.getElementById(`bash-${pid}`);
+        if (!host || host.offsetWidth === 0) return;
+        try { bashTerms[pid].fit.fit(); } catch (e) {}
+      });
+    });
+    document.querySelectorAll('.term-host').forEach(h => termRO.observe(h));
+  }
 
   /* ===== METRICS ===== */
   socket.on('metrics_update', (data) => {
