@@ -973,6 +973,18 @@ def api_gmail_seen():
     return jsonify(gmail_service.mark_seen(ids))
 
 
+@app.route("/api/gmail/setup-labels", methods=["POST"])
+def api_gmail_setup_labels():
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).parent / "services" / "cdp_fetch.py"), "setup_labels"],
+            capture_output=True, text=True, timeout=60
+        )
+        return jsonify(json.loads(proc.stdout))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
 @app.route("/api/calendar")
 @rate_limit()
 def api_calendar():
@@ -1440,9 +1452,7 @@ def gmail_thread():
                         "snippet": email.get("snippet", "")
                     })
             # New invite emails → refresh calendar immediately so the event shows up
-            if data.get("emails") and any(
-                e.get("tier") == "invite" for e in data.get("emails", [])
-            ):
+            if data.get("invite"):
                 gevent.spawn(_refresh_calendar)
         except Exception as exc:
             logger.warning(f"gmail_thread error: {exc}")

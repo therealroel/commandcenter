@@ -90,6 +90,8 @@ class GmailService:
             "feed": [],
             "cleanup": [],
             "invite": [],
+            "gcp": [],
+            "aws": [],
             "summary": "connecting...",
             "new_high": []
         }
@@ -140,7 +142,11 @@ class GmailService:
             email["summary"] = classification.get('summary', email.get('subject', ''))
             email["noteworthy"] = classification.get('noteworthy', False)
             
-            if tier == "INVITE":
+            if tier == "GCP":
+                result["gcp"].append(email)
+            elif tier == "AWS":
+                result["aws"].append(email)
+            elif tier == "INVITE":
                 result["invite"].append(email)
             elif tier == "HIGH":
                 result["high"].append(email)
@@ -164,7 +170,11 @@ class GmailService:
         a = len(result["action"])
         f = len(result["feed"])
         c = len(result["cleanup"])
+        g = len(result["gcp"])
+        aw = len(result["aws"])
         parts = []
+        if g: parts.append(f"{g} gcp")
+        if aw: parts.append(f"{aw} aws")
         if inv: parts.append(f"{inv} invite")
         if h: parts.append(f"{h} high")
         if a: parts.append(f"{a} action")
@@ -240,7 +250,18 @@ Key: If recipients show "me" that's Thomas in To field. If it shows only other n
     def _classify_rules(self, email):
         """Fallback rule-based classification."""
         from_addr = (email.get("from") or "").lower()
+        from_name = (email.get("from_name") or "").lower()
         subject = (email.get("subject") or "").lower()
+
+        # GCP: devops@bonniernews.se with Google Cloud display names
+        if (from_addr == 'devops@bonniernews.se' and
+                any(x in from_name for x in ['pam-noreply', 'google cloud', 'cloudplatform'])):
+            return {'tier': 'GCP', 'summary': email.get('subject', ''), 'noteworthy': True}
+
+        # AWS: Amazon/AWS senders
+        if (any(x in from_addr for x in ['@amazon.com', '@amazonaws.com', '@aws.amazon.com']) or
+                any(x in from_name for x in ['aws', 'amazon web services'])):
+            return {'tier': 'AWS', 'summary': email.get('subject', ''), 'noteworthy': True}
 
         # Calendar invites
         invite_subjects = ("invitation:", "updated invitation:", "accepted:", "declined:", "cancelled:", "you're invited")

@@ -442,8 +442,10 @@ body::after {
 #top-dock-row .docker-dock.collapsed,
 #top-dock-row .subs-dock.collapsed,
 #top-dock-row .gmail-dock.collapsed {
-  flex: 1 1 0%;
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
   order: -1;
   padding-bottom: 5px;
   border-right: 1px solid var(--border);
@@ -591,6 +593,12 @@ body::after {
 .gmail-tab-btn[data-tab="invite"].on { border-color: rgba(0,217,255,0.55); color: var(--cyan); background: rgba(0,217,255,0.08); }
 .gmail-tab-btn[data-tab="invite"].on .gmail-tab-count { background: rgba(0,217,255,0.22); }
 .gmail-tab-btn[data-tab="invite"].has-items:not(.on) .gmail-tab-count { color: rgba(0,217,255,0.8); background: rgba(0,217,255,0.14); }
+.gmail-tab-btn[data-tab="gcp"].on { border-color: #4285f4; color: #4285f4; background: rgba(66,133,244,0.08); }
+.gmail-tab-btn[data-tab="gcp"].on .gmail-tab-count { background: rgba(66,133,244,0.22); }
+.gmail-tab-btn[data-tab="gcp"].has-items:not(.on) .gmail-tab-count { color: rgba(66,133,244,0.8); background: rgba(66,133,244,0.14); }
+.gmail-tab-btn[data-tab="aws"].on { border-color: #ff9900; color: #ff9900; background: rgba(255,153,0,0.08); }
+.gmail-tab-btn[data-tab="aws"].on .gmail-tab-count { background: rgba(255,153,0,0.22); }
+.gmail-tab-btn[data-tab="aws"].has-items:not(.on) .gmail-tab-count { color: rgba(255,153,0,0.8); background: rgba(255,153,0,0.14); }
 
 .gmail-summary {
   font-size: 10px;
@@ -3162,6 +3170,8 @@ body::after {
     <span class="gmail-caret" id="gmail-caret">▾</span>
     <span class="gmail-title">✉ BORSEN INBOX <span class="dot" id="gmail-dot"></span></span>
     <div class="gmail-tabs" id="gmail-tabs">
+      <button class="gmail-tab-btn" data-tab="gcp">GCP <span class="gmail-tab-count" id="gmail-gcp-count">0</span></button>
+      <button class="gmail-tab-btn" data-tab="aws">AWS <span class="gmail-tab-count" id="gmail-aws-count">0</span></button>
       <button class="gmail-tab-btn" data-tab="invite">INVITE <span class="gmail-tab-count" id="gmail-invite-count">0</span></button>
       <button class="gmail-tab-btn on" data-tab="high">HIGH <span class="gmail-tab-count" id="gmail-high-count">0</span></button>
       <button class="gmail-tab-btn" data-tab="action">ACTION <span class="gmail-tab-count" id="gmail-action-count">0</span></button>
@@ -3174,6 +3184,12 @@ body::after {
   <div class="gmail-loading-bar"></div>
   <div class="gmail-body" id="gmail-body">
     <div class="gmail-emails" id="gmail-emails">
+      <div class="gmail-section gcp" id="gmail-gcp">
+        <div class="gmail-section-body" id="gmail-gcp-body"></div>
+      </div>
+      <div class="gmail-section aws" id="gmail-aws">
+        <div class="gmail-section-body" id="gmail-aws-body"></div>
+      </div>
       <div class="gmail-section invite" id="gmail-section-invite">
         <div class="gmail-section-body" id="gmail-invite-body"></div>
       </div>
@@ -5247,6 +5263,8 @@ body::after {
       dot.className = hasHigh ? 'dot alert' : (hasAction ? 'dot warn' : 'dot');
       summary.textContent = data.summary || 'inbox clear';
 
+      renderSection('gmail-gcp', data.gcp || []);
+      renderSection('gmail-aws', data.aws || []);
       renderSection('gmail-invite', data.invite || []);
       renderSection('gmail-high', data.high || []);
       renderSection('gmail-action', data.action || []);
