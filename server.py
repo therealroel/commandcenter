@@ -1763,12 +1763,11 @@ def handle_connect():
         socketio.emit("claude_subs_update", claude_subs_service.get_cached(), to=request.sid)
     except Exception as e:
         logger.warning(f"socket claude-subs on connect failed: {e}")
-    # Send cached gmail/calendar immediately on connect
-    if _gmail_cache:
-        try:
-            socketio.emit("gmail_update", _gmail_cache, to=request.sid)
-        except Exception as e:
-            logger.warning(f"socket gmail cache on connect failed: {e}")
+    # Send cached gmail/calendar immediately on connect (even empty cache clears the loading spinner)
+    try:
+        socketio.emit("gmail_update", _gmail_cache or {"available": False, "summary": "connecting..."}, to=request.sid)
+    except Exception as e:
+        logger.warning(f"socket gmail cache on connect failed: {e}")
     if _calendar_cache:
         try:
             today = _calendar_cache.get("0") or {}

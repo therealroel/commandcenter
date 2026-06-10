@@ -550,7 +550,7 @@ body::after {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  padding: 2px 7px;
+  padding: 5px 10px;
   border-radius: 3px;
   border: 1px solid var(--border);
   background: transparent;
@@ -3571,11 +3571,13 @@ body::after {
         });
       });
     }
+    // Show loading indicators only on the very first connect, not on reconnects
+    if (!socketEverConnected) {
+      document.getElementById('gmail-dock').classList.add('loading');
+      const calBody = document.querySelector('.cal-body');
+      if (calBody) calBody.classList.add('loading');
+    }
     socketEverConnected = true;
-    // Show gmail/calendar loading until first update arrives
-    document.getElementById('gmail-dock').classList.add('loading');
-    const calBody = document.querySelector('.cal-body');
-    if (calBody) calBody.classList.add('loading');
     // On reconnect, check if version changed and reload if so
     fetch('/api/version').then(r => r.json()).then(v => {
       if (window._ccVersion && v.git && v.git !== window._ccVersion) {
