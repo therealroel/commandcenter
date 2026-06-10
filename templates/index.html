@@ -422,7 +422,7 @@ body::after {
 #top-dock-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: stretch;
   min-height: 0;
   position: relative;
   z-index: 5;
@@ -443,13 +443,20 @@ body::after {
   flex: 1 1 auto;
   min-width: 160px;
   border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
-/* Remove double border when sharing a row */
+/* Remove double border on last collapsed item in row */
 #top-dock-row .docker-dock.collapsed:last-child,
 #top-dock-row .subs-dock.collapsed:last-child,
 #top-dock-row .gmail-dock.collapsed:last-child {
   border-right: none;
+}
+
+/* Hide gmail tabs + loading bar when collapsed so height matches other docks */
+#top-dock-row .gmail-dock.collapsed .gmail-tabs,
+#top-dock-row .gmail-dock.collapsed .gmail-loading-bar {
+  display: none;
 }
 
 /* ============= GMAIL DOCK ============= */
