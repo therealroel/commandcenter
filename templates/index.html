@@ -56,8 +56,8 @@ body {
   line-height: 1.5;
   height: 100vh;
   display: grid;
-  /* rows: header · status-rail · docker-dock · claude-subs-dock · gmail-dock · workspace-dock(1fr) · footer */
-  grid-template-rows: 52px auto auto auto auto 1fr 34px;
+  /* rows: header · status-rail · top-dock-row · workspace-dock(1fr) · footer */
+  grid-template-rows: 52px auto auto 1fr 34px;
   overflow: hidden;
   letter-spacing: 0.02em;
 }
@@ -418,6 +418,40 @@ body::after {
   min-height: 0;
 }
 
+/* ============= TOP DOCK ROW ============= */
+#top-dock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  min-height: 0;
+  position: relative;
+  z-index: 5;
+}
+
+/* Expanded dock: full width */
+#top-dock-row .docker-dock,
+#top-dock-row .subs-dock,
+#top-dock-row .gmail-dock {
+  flex: 0 0 100%;
+  box-sizing: border-box;
+}
+
+/* Collapsed dock: shrink to header width, share the row */
+#top-dock-row .docker-dock.collapsed,
+#top-dock-row .subs-dock.collapsed,
+#top-dock-row .gmail-dock.collapsed {
+  flex: 1 1 auto;
+  min-width: 160px;
+  border-right: 1px solid var(--border);
+}
+
+/* Remove double border when sharing a row */
+#top-dock-row .docker-dock.collapsed:last-child,
+#top-dock-row .subs-dock.collapsed:last-child,
+#top-dock-row .gmail-dock.collapsed:last-child {
+  border-right: none;
+}
+
 /* ============= GMAIL DOCK ============= */
 .gmail-dock {
   padding: 7px 16px;
@@ -477,6 +511,22 @@ body::after {
 @keyframes gmailPulse {
   0%, 100% { box-shadow: var(--glow-red); }
   50% { box-shadow: 0 0 14px rgba(255,68,102,0.9); }
+}
+
+.gmail-loading-bar {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  background-size: 200% 100%;
+  animation: gmailLoadSlide 1.2s linear infinite;
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+}
+.gmail-dock.loading .gmail-loading-bar { opacity: 1; }
+@keyframes gmailLoadSlide {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* Tab strip */
@@ -961,6 +1011,22 @@ body::after {
   padding: 28px 10px;
   text-align: center;
   letter-spacing: 0.04em;
+}
+
+.cal-loading {
+  display: none;
+  font-size: 10px;
+  color: var(--cyan-dim);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 8px 0;
+  animation: calPulse 1s ease-in-out infinite;
+}
+.cal-body.loading .cal-loading { display: block; }
+.cal-body.loading .cal-events { opacity: 0.3; pointer-events: none; }
+@keyframes calPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 .chat-panel {
@@ -3054,6 +3120,9 @@ body::after {
   </div>
 </div>
 
+<!-- ============= TOP DOCK ROW (docker + subs + gmail share one horizontal row when collapsed) ============= -->
+<div id="top-dock-row">
+
 <!-- ============= DOCKER DOCK ============= -->
 <div class="docker-dock" id="docker-dock">
   <div class="docker-head" id="docker-head" role="button" tabindex="0" aria-expanded="true" title="Click to collapse / expand">
@@ -3091,6 +3160,7 @@ body::after {
     <span class="gmail-summary" id="gmail-summary">connecting...</span>
     <button class="gmail-login-btn" id="gmail-login-btn" style="display:none;" title="Open Gmail login page">LOGIN REQUIRED</button>
   </div>
+  <div class="gmail-loading-bar"></div>
   <div class="gmail-body" id="gmail-body">
     <div class="gmail-emails" id="gmail-emails">
       <div class="gmail-section invite" id="gmail-section-invite">
@@ -3123,11 +3193,14 @@ body::after {
         </div>
       </div>
       <div class="cal-body" id="cal-body">
+        <div class="cal-loading">loading events…</div>
         <div class="cal-empty">Loading events...</div>
       </div>
     </div>
   </div>
 </div>
+
+</div><!-- /#top-dock-row -->
 
 <!-- ============= WORKSPACE DOCK ============= -->
 <div class="channels-dock" id="channels-dock">
@@ -3488,6 +3561,10 @@ body::after {
       });
     }
     socketEverConnected = true;
+    // Show gmail/calendar loading until first update arrives
+    document.getElementById('gmail-dock').classList.add('loading');
+    const calBody = document.querySelector('.cal-body');
+    if (calBody) calBody.classList.add('loading');
     // On reconnect, check if version changed and reload if so
     fetch('/api/version').then(r => r.json()).then(v => {
       if (window._ccVersion && v.git && v.git !== window._ccVersion) {
@@ -5131,6 +5208,7 @@ body::after {
     }
 
     socket.on('gmail_update', (data) => {
+      document.getElementById('gmail-dock').classList.remove('loading');
       const dot = document.getElementById('gmail-dot');
       const summary = document.getElementById('gmail-summary');
       if (!dot || !summary) return;
@@ -5205,6 +5283,7 @@ body::after {
         document.querySelectorAll('.cal-day-btn').forEach(b => b.classList.remove('on'));
         btn.classList.add('on');
         currentCalDay = parseInt(btn.dataset.day);
+        document.querySelector('.cal-body').classList.add('loading');
         fetchCalendar(currentCalDay);
       });
     });
@@ -5212,8 +5291,15 @@ body::after {
     function fetchCalendar(dayOffset) {
       fetch(`/api/calendar?day=${dayOffset}`)
         .then(r => r.json())
-        .then(data => renderCalendar(data))
-        .catch(() => {});
+        .then(data => {
+          const calBody = document.querySelector('.cal-body');
+          if (calBody) calBody.classList.remove('loading');
+          renderCalendar(data);
+        })
+        .catch(() => {
+          const calBody = document.querySelector('.cal-body');
+          if (calBody) calBody.classList.remove('loading');
+        });
     }
 
     function renderCalendar(data) {
@@ -5253,6 +5339,8 @@ body::after {
     }
 
     socket.on('calendar_update', (data) => {
+      const calBody = document.querySelector('.cal-body');
+      if (calBody) calBody.classList.remove('loading');
       if (currentCalDay === 0) renderCalendar(data);
     });
 
