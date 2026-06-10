@@ -5284,30 +5284,22 @@ body::after {
 
     // ---- Calendar ----
     let currentCalDay = 0;
+    const calCache = {0: null, 1: null};
+
     document.querySelectorAll('.cal-day-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         document.querySelectorAll('.cal-day-btn').forEach(b => b.classList.remove('on'));
         btn.classList.add('on');
         currentCalDay = parseInt(btn.dataset.day);
-        document.querySelector('.cal-body').classList.add('loading');
-        fetchCalendar(currentCalDay);
+        const calBody = document.querySelector('.cal-body');
+        if (calCache[currentCalDay]) {
+          renderCalendar(calCache[currentCalDay]);
+        } else {
+          if (calBody) calBody.classList.add('loading');
+        }
       });
     });
-
-    function fetchCalendar(dayOffset) {
-      fetch(`/api/calendar?day=${dayOffset}`)
-        .then(r => r.json())
-        .then(data => {
-          const calBody = document.querySelector('.cal-body');
-          if (calBody) calBody.classList.remove('loading');
-          renderCalendar(data);
-        })
-        .catch(() => {
-          const calBody = document.querySelector('.cal-body');
-          if (calBody) calBody.classList.remove('loading');
-        });
-    }
 
     function renderCalendar(data) {
       const body = document.getElementById('cal-body');
@@ -5348,10 +5340,10 @@ body::after {
     socket.on('calendar_update', (data) => {
       const calBody = document.querySelector('.cal-body');
       if (calBody) calBody.classList.remove('loading');
-      if (currentCalDay === 0) renderCalendar(data);
+      calCache[0] = data.today || {};
+      calCache[1] = data.tmr || {};
+      renderCalendar(calCache[currentCalDay]);
     });
-
-    fetchCalendar(0);
   })();
 
   function renderAgents(data) {

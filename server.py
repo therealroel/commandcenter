@@ -128,7 +128,12 @@ def _load_disk_cache(path):
     return None
 
 _gmail_cache = _load_disk_cache(_GMAIL_CACHE_FILE)
-_calendar_cache = _load_disk_cache(_CALENDAR_CACHE_FILE)
+_raw = _load_disk_cache(_CALENDAR_CACHE_FILE)
+# Support both old single-day format and new two-day format
+if isinstance(_raw, dict) and ("0" in _raw or "1" in _raw):
+    _calendar_cache = _raw
+else:
+    _calendar_cache = {"0": _raw if _raw else {}, "1": {}}
 
 # Per-panel state -----------------------------------------------------------
 # sid -> { panel_id: {bridge, project, agent} }
@@ -972,6 +977,9 @@ def api_gmail_seen():
 @rate_limit()
 def api_calendar():
     day_offset = int(request.args.get("day", 0))
+    cached = _calendar_cache.get(str(day_offset))
+    if cached:
+        return jsonify(cached)
     return jsonify(calendar_service.get_events(day_offset))
 
 @app.route("/api/calendar/status")
@@ -1440,15 +1448,16 @@ def calendar_thread():
     logger.info("THREAD_START: calendar_thread")
     while True:
         try:
-            data = calendar_service.get_events()
             global _calendar_cache
-            _calendar_cache = data
+            today = calendar_service.get_events(0)
+            tmr = calendar_service.get_events(1)
+            _calendar_cache = {"0": today, "1": tmr}
             try:
                 _CALENDAR_CACHE_FILE.parent.mkdir(exist_ok=True)
-                _CALENDAR_CACHE_FILE.write_text(json.dumps(data))
+                _CALENDAR_CACHE_FILE.write_text(json.dumps(_calendar_cache))
             except Exception:
                 pass
-            socketio.emit("calendar_update", data)
+            socketio.emit("calendar_update", {"today": today, "tmr": tmr})
         except Exception as exc:
             logger.warning(f"calendar_thread error: {exc}")
         gevent.sleep(300)
@@ -1752,7 +1761,9 @@ def handle_connect():
             logger.warning(f"socket gmail cache on connect failed: {e}")
     if _calendar_cache:
         try:
-            socketio.emit("calendar_update", _calendar_cache, to=request.sid)
+            today = _calendar_cache.get("0") or {}
+        tmr = _calendar_cache.get("1") or {}
+        socketio.emit("calendar_update", {"today": today, "tmr": tmr}, to=request.sid)
         except Exception as e:
             logger.warning(f"socket calendar cache on connect failed: {e}")
 
