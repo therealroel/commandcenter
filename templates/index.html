@@ -3123,7 +3123,7 @@ body::after {
           <div class="menu-toggle-item">
             <span class="menu-item-label">Auto-close idle sessions</span>
             <label class="toggle-switch">
-              <input type="checkbox" id="auto-close-toggle" checked>
+              <input type="checkbox" id="auto-close-toggle" name="auto-close-toggle" aria-label="Auto-close idle sessions" checked>
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -3131,7 +3131,7 @@ body::after {
         <div class="menu-section">
           <div class="menu-section-title">IDE</div>
           <div class="menu-section-desc">Which editor the per-channel "Open IDE" button launches. Auto-detect picks the IDE you're currently running.</div>
-          <select id="ide-select" class="menu-select-full">
+          <select id="ide-select" name="ide-select" aria-label="IDE launcher" class="menu-select-full">
             <option value="auto">Loading…</option>
           </select>
           <div class="form-group" id="ide-custom-group" style="display:none; margin-top:10px;">
@@ -3395,8 +3395,8 @@ body::after {
         <input id="pf-path" name="pf-path" readonly>
       </div>
       <div>
-        <label>Agent</label>
-        <select id="pf-agent">
+        <label for="pf-agent">Agent</label>
+        <select id="pf-agent" name="pf-agent" aria-label="Agent type">
           <option value="claude">claude</option>
           <option value="opencode">opencode</option>
           <option value="codex">codex</option>
