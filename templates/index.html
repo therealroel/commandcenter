@@ -450,6 +450,7 @@ body::after {
   padding-bottom: 5px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  align-self: stretch;
 }
 
 /* Remove double border on last collapsed item in row */
@@ -485,6 +486,7 @@ body::after {
   cursor: pointer;
   user-select: none;
   min-height: 28px;
+  height: 100%;
 }
 .gmail-head:hover .gmail-title { color: var(--text-secondary); }
 
@@ -758,7 +760,9 @@ body::after {
 /* Hover-reveal action buttons */
 .gmail-card-actions {
   display: flex;
-  gap: 7px;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
   align-self: center;
   opacity: 0;
@@ -773,7 +777,11 @@ body::after {
   letter-spacing: 0.08em;
   font-weight: 700;
   transition: color 0.12s ease;
-  line-height: 1;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
 }
 .gmail-open-link:hover { color: var(--cyan); }
 .gmail-delete-btn {
@@ -782,10 +790,13 @@ body::after {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 0 8px;
   font-family: inherit;
   transition: color 0.12s ease;
-  line-height: 1;
+  height: 22px;
+  line-height: 22px;
+  display: inline-flex;
+  align-items: center;
 }
 .gmail-delete-btn:hover { color: var(--red); }
 
@@ -796,11 +807,15 @@ body::after {
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 2px 5px;
+  padding: 0 8px;
   border-radius: 2px;
   cursor: pointer;
   font-family: inherit;
   transition: color 0.15s, border-color 0.15s;
+  height: 22px;
+  line-height: 22px;
+  display: inline-flex;
+  align-items: center;
 }
 .gmail-card-read:hover { color: var(--cyan); border-color: var(--cyan-dim); }
 
@@ -1031,6 +1046,28 @@ body::after {
   padding: 28px 10px;
   text-align: center;
   letter-spacing: 0.04em;
+}
+
+.cal-now-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 6px;
+  position: relative;
+}
+.cal-now-line::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--cyan);
+  opacity: 0.6;
+}
+.cal-now-time {
+  font-size: 9px;
+  color: var(--cyan);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .cal-loading {
@@ -1700,6 +1737,7 @@ body::after {
   cursor: pointer;
   user-select: none;
   position: relative;
+  height: 100%;
 }
 .docker-head:hover .docker-title { color: var(--text-secondary); }
 
@@ -1903,6 +1941,7 @@ body::after {
   cursor: pointer;
   user-select: none;
   position: relative;
+  height: 100%;
 }
 .subs-head:hover .subs-title { color: var(--text-secondary); }
 
@@ -4591,16 +4630,18 @@ body::after {
     const projEl = document.querySelector(`#panel-${panelId} .panel-project`);
     if (projEl) projEl.textContent = name || 'no project';
     if (proj) {
-      // Only use project's default agent if panel doesn't have a saved agent
-      // The saved agent in panelState takes precedence over project defaults
-      const savedAgent = panels[panelId].agentIdx;
-      const currentAgentName = AGENTS[savedAgent].name;
-      // We'll update the button but keep the saved agent
+      // Use the project's configured agent (falls back to current panel agent if not set)
+      const projectAgentIdx = AGENTS.findIndex(a => a.name === (proj.agent || 'claude'));
+      const agentIdx = projectAgentIdx >= 0 ? projectAgentIdx : panels[panelId].agentIdx;
+      panels[panelId].agentIdx = agentIdx;
       const btn = document.getElementById(`agent-btn-${panelId}`);
-      btn.querySelector('.a-glyph').textContent = AGENTS[savedAgent].emoji;
-      btn.className = `agent-btn ${AGENTS[savedAgent].cls}`;
-      btn.dataset.panel = panelId;
-      document.getElementById(`agent-name-${panelId}`).textContent = currentAgentName;
+      if (btn) {
+        btn.querySelector('.a-glyph').textContent = AGENTS[agentIdx].emoji;
+        btn.className = `agent-btn ${AGENTS[agentIdx].cls}`;
+        btn.dataset.panel = panelId;
+      }
+      const nameEl = document.getElementById(`agent-name-${panelId}`);
+      if (nameEl) nameEl.textContent = AGENTS[agentIdx].name;
     }
     renderProjectsStrip();
   }
@@ -5360,6 +5401,14 @@ body::after {
         `;
         body.appendChild(el);
       });
+      // Current time line — only for today's view
+      if (currentCalDay === 0) {
+        const now = new Date();
+        const timeLine = document.createElement('div');
+        timeLine.className = 'cal-now-line';
+        timeLine.innerHTML = `<span class="cal-now-time">${now.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false})}</span>`;
+        body.insertBefore(timeLine, body.firstChild);
+      }
     }
 
     socket.on('calendar_update', (data) => {
