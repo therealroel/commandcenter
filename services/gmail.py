@@ -258,9 +258,10 @@ Key: If recipients show "me" that's Thomas in To field. If it shows only other n
                 any(x in from_name for x in ['pam-noreply', 'google cloud', 'cloudplatform'])):
             return {'tier': 'GCP', 'summary': email.get('subject', ''), 'noteworthy': True}
 
-        # AWS: Amazon/AWS senders
-        if (any(x in from_addr for x in ['@amazon.com', '@amazonaws.com', '@aws.amazon.com']) or
-                any(x in from_name for x in ['aws', 'amazon web services'])):
+        # AWS: Amazon/AWS senders (incl. forwarded via internal lists like cloud-aws@*)
+        if (any(x in from_addr for x in ['@amazon.com', '@amazonaws.com', '@aws.amazon.com'])
+                or 'aws' in from_addr.split('@')[0]
+                or any(x in from_name for x in ['amazon web service', 'aws', 'amazon web services'])):
             return {'tier': 'AWS', 'summary': email.get('subject', ''), 'noteworthy': True}
 
         # Calendar invites

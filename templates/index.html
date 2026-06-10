@@ -530,13 +530,14 @@ body::after {
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--cyan), transparent);
   background-size: 200% 100%;
-  animation: gmailLoadSlide 1.2s linear infinite;
   border-radius: 1px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  display: none;
   flex-shrink: 0;
 }
-.gmail-dock.loading .gmail-loading-bar { opacity: 1; }
+.gmail-dock.loading .gmail-loading-bar {
+  display: block;
+  animation: gmailLoadSlide 1.2s linear infinite;
+}
 @keyframes gmailLoadSlide {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -3190,7 +3191,7 @@ body::after {
       <div class="gmail-section aws" id="gmail-aws">
         <div class="gmail-section-body" id="gmail-aws-body"></div>
       </div>
-      <div class="gmail-section invite" id="gmail-section-invite">
+      <div class="gmail-section invite" id="gmail-invite">
         <div class="gmail-section-body" id="gmail-invite-body"></div>
       </div>
       <div class="gmail-section high tab-active" id="gmail-high">
