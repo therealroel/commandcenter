@@ -532,8 +532,8 @@ body::after {
 }
 
 .gmail-loading-bar {
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,217,255,0.35), transparent);
   background-size: 200% 100%;
   border-radius: 1px;
   display: none;
@@ -541,7 +541,7 @@ body::after {
 }
 .gmail-dock.loading .gmail-loading-bar {
   display: block;
-  animation: gmailLoadSlide 1.2s linear infinite;
+  animation: gmailLoadSlide 1.8s ease-in-out infinite;
 }
 @keyframes gmailLoadSlide {
   0% { background-position: 200% 0; }
@@ -3105,12 +3105,12 @@ body::after {
           <div id="bedrock-setup" style="display:none;">
             <div class="menu-section-desc" style="margin-top:12px;">No Bedrock config found. Enter your AWS credentials to create one:</div>
             <div class="form-group">
-              <label>AWS Region</label>
-              <input type="text" id="bedrock-region" placeholder="e.g. eu-north-1" value="eu-north-1">
+              <label for="bedrock-region">AWS Region</label>
+              <input type="text" id="bedrock-region" name="bedrock-region" placeholder="e.g. eu-north-1" value="eu-north-1">
             </div>
             <div class="form-group">
-              <label>AWS Bearer Token</label>
-              <input type="password" id="bedrock-token" placeholder="bedrock-api-key-...">
+              <label for="bedrock-token">AWS Bearer Token</label>
+              <input type="password" id="bedrock-token" name="bedrock-token" placeholder="bedrock-api-key-..." autocomplete="new-password">
             </div>
             <button class="menu-action-btn" id="save-bedrock-btn">Save Bedrock Config</button>
           </div>
@@ -3135,8 +3135,8 @@ body::after {
             <option value="auto">Loading…</option>
           </select>
           <div class="form-group" id="ide-custom-group" style="display:none; margin-top:10px;">
-            <label>Custom launcher command</label>
-            <input type="text" id="ide-custom-input" placeholder="e.g. nvim-qt, lapce, /opt/foo/bin/editor" autocomplete="off" spellcheck="false">
+            <label for="ide-custom-input">Custom launcher command</label>
+            <input type="text" id="ide-custom-input" name="ide-custom-input" placeholder="e.g. nvim-qt, lapce, /opt/foo/bin/editor" autocomplete="off" spellcheck="false">
           </div>
           <div class="menu-note" id="ide-note"></div>
         </div>
@@ -3383,16 +3383,16 @@ body::after {
       <span class="target">PANEL <b id="palette-target">--</b></span>
     </div>
     <div class="palette-path" id="palette-path" style="display:none;"></div>
-    <input class="palette-input" id="palette-input" placeholder="type to filter projects..." autocomplete="off">
+    <input class="palette-input" id="palette-input" aria-label="Filter projects" placeholder="type to filter projects..." autocomplete="off">
     <div class="palette-list" id="palette-list"></div>
     <div class="palette-form" id="palette-form" style="display:none;">
       <div>
-        <label>Project name</label>
-        <input id="pf-name" autocomplete="off">
+        <label for="pf-name">Project name</label>
+        <input id="pf-name" name="pf-name" autocomplete="off">
       </div>
       <div>
-        <label>Path</label>
-        <input id="pf-path" readonly>
+        <label for="pf-path">Path</label>
+        <input id="pf-path" name="pf-path" readonly>
       </div>
       <div>
         <label>Agent</label>
@@ -5302,6 +5302,11 @@ body::after {
 
       emails.forEach(email => bodyEl.appendChild(makeCard(email, tier)));
     }
+
+    socket.on('gmail_status', (data) => {
+      const summary = document.getElementById('gmail-summary');
+      if (summary) summary.textContent = data.msg || '';
+    });
 
     socket.on('gmail_update', (data) => {
       document.getElementById('gmail-dock').classList.remove('loading');

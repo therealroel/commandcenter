@@ -1434,7 +1434,10 @@ def gmail_thread():
     logger.info("THREAD_START: gmail_thread")
     while True:
         try:
-            data = gmail_service.get_emails()
+            def _status(msg):
+                socketio.emit("gmail_status", {"msg": msg})
+            socketio.emit("gmail_status", {"msg": "fetching from chrome..."})
+            data = gmail_service.get_emails(status_fn=_status)
             global _gmail_cache
             _gmail_cache = data
             try:

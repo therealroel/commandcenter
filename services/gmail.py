@@ -80,7 +80,11 @@ class GmailService:
             logger.warning(f"Failed to open Gmail tab: {e}")
             return None
     
-    def get_emails(self):
+    def get_emails(self, status_fn=None):
+        def _st(msg):
+            if status_fn:
+                try: status_fn(msg)
+                except Exception: pass
         result = {
             "available": False,
             "needs_login": False,
@@ -99,7 +103,8 @@ class GmailService:
         if not self.is_available():
             result["summary"] = "chrome offline"
             return result
-        
+
+        _st("reading inbox...")
         try:
             proc = subprocess.run(
                 [sys.executable, str(Path(__file__).parent / "cdp_fetch.py"), "gmail"],
@@ -129,7 +134,9 @@ class GmailService:
         
         emails = data.get("emails", [])
         result["available"] = True
-        
+
+        n = len(emails)
+        _st(f"classifying {n} email{'s' if n != 1 else ''}...")
         classifications = self._classify_batch(emails)
         
         for i, email in enumerate(emails):
