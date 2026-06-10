@@ -5857,6 +5857,18 @@ body::after {
         const left = Math.max(0, Math.min(total, epoch - now));
         el.style.width = (left / total * 100).toFixed(1) + '%';
       });
+      // Dismiss the "all exhausted" banner once the soonest reset epoch passes.
+      if (notice.classList.contains('wait')) {
+        let soonest = Infinity;
+        document.querySelectorAll('#subs-body .subs-reset[data-reset], #subs-summary .subs-reset[data-reset]').forEach(el => {
+          const e = parseFloat(el.getAttribute('data-reset'));
+          if (e && e < soonest) soonest = e;
+        });
+        if (soonest !== Infinity && now >= soonest) {
+          clearNotice();
+          browserNotify('Claude sub available', 'A subscription is ready to use again.');
+        }
+      }
     }
     setInterval(tickCountdowns, 1000);
 
