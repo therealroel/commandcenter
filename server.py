@@ -1439,28 +1439,38 @@ def gmail_thread():
                         "subject": email.get("subject", ""),
                         "snippet": email.get("snippet", "")
                     })
+            # New invite emails → refresh calendar immediately so the event shows up
+            if data.get("emails") and any(
+                e.get("tier") == "invite" for e in data.get("emails", [])
+            ):
+                gevent.spawn(_refresh_calendar)
         except Exception as exc:
             logger.warning(f"gmail_thread error: {exc}")
-        gevent.sleep(300)
+        gevent.sleep(120)
+
+
+def _refresh_calendar():
+    """Fetch both calendar days, update cache, broadcast. Safe to spawn as greenlet."""
+    try:
+        global _calendar_cache
+        today = calendar_service.get_events(0)
+        tmr = calendar_service.get_events(1)
+        _calendar_cache = {"0": today, "1": tmr}
+        try:
+            _CALENDAR_CACHE_FILE.parent.mkdir(exist_ok=True)
+            _CALENDAR_CACHE_FILE.write_text(json.dumps(_calendar_cache))
+        except Exception:
+            pass
+        socketio.emit("calendar_update", {"today": today, "tmr": tmr})
+    except Exception as exc:
+        logger.warning(f"_refresh_calendar error: {exc}")
 
 
 def calendar_thread():
     logger.info("THREAD_START: calendar_thread")
     while True:
-        try:
-            global _calendar_cache
-            today = calendar_service.get_events(0)
-            tmr = calendar_service.get_events(1)
-            _calendar_cache = {"0": today, "1": tmr}
-            try:
-                _CALENDAR_CACHE_FILE.parent.mkdir(exist_ok=True)
-                _CALENDAR_CACHE_FILE.write_text(json.dumps(_calendar_cache))
-            except Exception:
-                pass
-            socketio.emit("calendar_update", {"today": today, "tmr": tmr})
-        except Exception as exc:
-            logger.warning(f"calendar_thread error: {exc}")
-        gevent.sleep(300)
+        _refresh_calendar()
+        gevent.sleep(120)
 
 
 def version_watcher_thread():
