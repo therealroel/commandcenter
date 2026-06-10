@@ -93,7 +93,7 @@ def fetch_gmail():
                     .filter(l => l && l !== '-' && !/^\\d+\\s*[A-Z]*$/.test(l));
                 const recipients = '';
                 const rawSnippet = lines.slice(1, 4).join(' ').substring(0, 300);
-                const snippet = rawSnippet.replace(/^\\d+\\s+/, '');
+                const snippet = rawSnippet.replace(/^\\d+\\s+(?:[A-Z][A-Z0-9]*\\s+)*/, '');
 
                 results.push({
                     id: emailId,
@@ -294,9 +294,23 @@ def mark_read(thread_ids):
         }''', thread_ids)
 
         if marked > 0:
-            page.wait_for_timeout(400)
-            # Use Gmail keyboard shortcut Shift+I = mark as read
-            page.keyboard.press('Shift+I')
+            page.wait_for_timeout(500)
+            # Click Gmail toolbar "Mark as read" button
+            try:
+                btn = page.query_selector('[data-tooltip="Mark as read"], [aria-label="Mark as read"]')
+                if btn:
+                    btn.click()
+                else:
+                    # Fallback: open More actions menu and click Mark as read
+                    more = page.query_selector('[data-tooltip="More"], [aria-label="More"]')
+                    if more:
+                        more.click()
+                        page.wait_for_timeout(300)
+                        read_item = page.query_selector('[id$=":4"], [data-action-id="11"]')
+                        if read_item:
+                            read_item.click()
+            except Exception:
+                pass
             page.wait_for_timeout(600)
 
         return {"ok": True, "marked": marked}

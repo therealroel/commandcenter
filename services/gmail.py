@@ -89,6 +89,7 @@ class GmailService:
             "action": [],
             "feed": [],
             "cleanup": [],
+            "invite": [],
             "summary": "connecting...",
             "new_high": []
         }
@@ -139,7 +140,9 @@ class GmailService:
             email["summary"] = classification.get('summary', email.get('subject', ''))
             email["noteworthy"] = classification.get('noteworthy', False)
             
-            if tier == "HIGH":
+            if tier == "INVITE":
+                result["invite"].append(email)
+            elif tier == "HIGH":
                 result["high"].append(email)
                 if is_new and email.get("unread"):
                     result["new_high"].append(email)
@@ -156,11 +159,13 @@ class GmailService:
         
         self._save_seen()
         
+        inv = len(result["invite"])
         h = len(result["high"])
         a = len(result["action"])
         f = len(result["feed"])
         c = len(result["cleanup"])
         parts = []
+        if inv: parts.append(f"{inv} invite")
         if h: parts.append(f"{h} high")
         if a: parts.append(f"{a} action")
         if f: parts.append(f"{f} feed")
@@ -197,6 +202,7 @@ Tiers:
 - HIGH: Directly addressed to Thomas in the To: field. Look for "me" in recipients, his name, his email, or context that shows he's the primary recipient. Urgent or needs immediate action.
 - ACTION: Thomas should act on it but he's CC'd, mentioned, or it's relevant to his work/team. Not the primary recipient.
 - FEED: Newsletters, announcements, FYI - only mark noteworthy:true if truly important
+- INVITE: Calendar invitations, meeting requests, accepted/declined/cancelled meeting notifications
 - CLEANUP: Automated noise, irrelevant newsletters, things Thomas would delete without reading
 
 Key: If recipients show "me" that's Thomas in To field. If it shows only other names, Thomas is likely CC'd or not directly addressed.
@@ -234,7 +240,14 @@ Key: If recipients show "me" that's Thomas in To field. If it shows only other n
     def _classify_rules(self, email):
         """Fallback rule-based classification."""
         from_addr = (email.get("from") or "").lower()
-        
+        subject = (email.get("subject") or "").lower()
+
+        # Calendar invites
+        invite_subjects = ("invitation:", "updated invitation:", "accepted:", "declined:", "cancelled:", "you're invited")
+        invite_senders = ("calendar-notification@google.com", "calendar.google.com", "@calendar.")
+        if any(subject.startswith(s) for s in invite_subjects) or any(s in from_addr for s in invite_senders):
+            return {'tier': 'INVITE', 'summary': email.get('subject', ''), 'noteworthy': True}
+
         for pattern in self._cleanup_patterns:
             if pattern.get("sender", "").lower() in from_addr and pattern.get("count", 0) >= 3:
                 return {'tier': 'CLEANUP', 'summary': email.get('subject', ''), 'noteworthy': False}

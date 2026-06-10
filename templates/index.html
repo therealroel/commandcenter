@@ -527,6 +527,9 @@ body::after {
 .gmail-tab-btn[data-tab="action"].has-items:not(.on) .gmail-tab-count { color: rgba(255,170,0,0.8); background: rgba(255,170,0,0.14); }
 .gmail-tab-btn[data-tab="feed"].has-items:not(.on) .gmail-tab-count,
 .gmail-tab-btn[data-tab="cleanup"].has-items:not(.on) .gmail-tab-count { color: var(--text-secondary); background: rgba(255,255,255,0.1); }
+.gmail-tab-btn[data-tab="invite"].on { border-color: rgba(0,217,255,0.55); color: var(--cyan); background: rgba(0,217,255,0.08); }
+.gmail-tab-btn[data-tab="invite"].on .gmail-tab-count { background: rgba(0,217,255,0.22); }
+.gmail-tab-btn[data-tab="invite"].has-items:not(.on) .gmail-tab-count { color: rgba(0,217,255,0.8); background: rgba(0,217,255,0.14); }
 
 .gmail-summary {
   font-size: 10px;
@@ -606,6 +609,8 @@ body::after {
 .gmail-section.action .gmail-card { border-left-color: rgba(255,170,0,0.3); }
 .gmail-section.action .gmail-card.unread { border-left-color: var(--yellow); }
 .gmail-section.feed .gmail-card { border-left-color: var(--border); }
+.gmail-section.invite .gmail-card { border-left-color: rgba(0,217,255,0.35); }
+.gmail-section.invite .gmail-card.unread { border-left-color: var(--cyan); }
 
 /* HIGH unread — subtle red ambient background */
 .gmail-section.high .gmail-card.unread {
@@ -630,6 +635,8 @@ body::after {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 .gmail-from {
   font-size: 12px;
@@ -683,6 +690,7 @@ body::after {
   display: flex;
   gap: 7px;
   flex-shrink: 0;
+  align-self: center;
   opacity: 0;
   transition: opacity 0.12s ease;
   pointer-events: none;
@@ -3074,6 +3082,7 @@ body::after {
     <span class="gmail-caret" id="gmail-caret">▾</span>
     <span class="gmail-title">✉ BORSEN INBOX <span class="dot" id="gmail-dot"></span></span>
     <div class="gmail-tabs" id="gmail-tabs">
+      <button class="gmail-tab-btn" data-tab="invite">INVITE <span class="gmail-tab-count" id="gmail-invite-count">0</span></button>
       <button class="gmail-tab-btn on" data-tab="high">HIGH <span class="gmail-tab-count" id="gmail-high-count">0</span></button>
       <button class="gmail-tab-btn" data-tab="action">ACTION <span class="gmail-tab-count" id="gmail-action-count">0</span></button>
       <button class="gmail-tab-btn" data-tab="feed">FEED <span class="gmail-tab-count" id="gmail-feed-count">0</span></button>
@@ -3084,6 +3093,9 @@ body::after {
   </div>
   <div class="gmail-body" id="gmail-body">
     <div class="gmail-emails" id="gmail-emails">
+      <div class="gmail-section invite" id="gmail-section-invite">
+        <div class="gmail-section-body" id="gmail-invite-body"></div>
+      </div>
       <div class="gmail-section high tab-active" id="gmail-high">
         <div class="gmail-section-body" id="gmail-high-body"></div>
       </div>
@@ -5040,8 +5052,8 @@ body::after {
             <span class="expand-from">${escapeHtml(email.from_name || email.from)}</span>
             <span class="expand-email">&lt;${escapeHtml(email.from)}&gt;</span>
           </div>
-          <div class="gmail-card-expand-body" data-url="${escapeHtml(email.url || '')}">
-            <span class="expand-loading">loading full email…</span>
+          <div class="gmail-card-expand-body">
+            <div class="expand-body-text">${escapeHtml(email.snippet || '(no preview available)')}</div>
           </div>
         </div>
       `;
@@ -5080,27 +5092,7 @@ body::after {
       // Click card body to expand/collapse (but not when clicking action buttons)
       card.addEventListener('click', function(e) {
         if (e.target.closest('.gmail-card-actions') || e.target.closest('.gmail-cleanup-check')) return;
-        const wasExpanded = card.classList.contains('expanded');
         card.classList.toggle('expanded');
-        // Lazy-load full body when first expanding
-        if (!wasExpanded && email.url) {
-          const bodyEl = card.querySelector('.gmail-card-expand-body');
-          if (bodyEl && !bodyEl.dataset.loaded) {
-            bodyEl.dataset.loaded = '1';
-            fetch(`/api/gmail/fetch-body?url=${encodeURIComponent(email.url)}`)
-              .then(r => r.json())
-              .then(data => {
-                bodyEl.innerHTML = '';
-                const pre = document.createElement('div');
-                pre.className = 'expand-body-text';
-                pre.textContent = data.body || '(no body)';
-                bodyEl.appendChild(pre);
-              })
-              .catch(() => {
-                bodyEl.textContent = '(failed to load)';
-              });
-          }
-        }
       });
 
       return card;
@@ -5164,6 +5156,7 @@ body::after {
       dot.className = hasHigh ? 'dot alert' : (hasAction ? 'dot warn' : 'dot');
       summary.textContent = data.summary || 'inbox clear';
 
+      renderSection('gmail-invite', data.invite || []);
       renderSection('gmail-high', data.high || []);
       renderSection('gmail-action', data.action || []);
       renderSection('gmail-feed', data.feed || []);
