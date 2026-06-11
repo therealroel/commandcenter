@@ -5262,6 +5262,7 @@ body::after {
         e.stopPropagation();
         const id = e.currentTarget.dataset.emailId;
         const sender = e.currentTarget.dataset.sender;
+        const sectionBody = card.parentElement;
         fetch('/api/gmail/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5269,7 +5270,15 @@ body::after {
         }).then(r => r.json()).then(() => {
           card.style.opacity = '0';
           card.style.transition = 'opacity 0.25s ease';
-          setTimeout(() => card.remove(), 250);
+          setTimeout(() => {
+            card.remove();
+            if (sectionBody) {
+              const countEl = document.getElementById(sectionBody.id.replace('-body', '-count'));
+              const remaining = sectionBody.querySelectorAll('.gmail-card').length;
+              if (countEl) countEl.textContent = remaining;
+              if (remaining === 0) sectionBody.innerHTML = '<div class="gmail-empty">Nothing here</div>';
+            }
+          }, 250);
         }).catch(() => {});
       });
 
