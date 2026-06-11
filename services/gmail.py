@@ -277,6 +277,9 @@ Key: If recipients show "me" that's Thomas in To field. If it shows only other n
         if any(subject.startswith(s) for s in invite_subjects) or any(s in from_addr for s in invite_senders):
             return {'tier': 'INVITE', 'summary': email.get('subject', ''), 'noteworthy': True}
 
+        if 'uptimerobot' in from_addr or 'uptimerobot' in subject:
+            return {'tier': 'CLEANUP', 'summary': email.get('subject', ''), 'noteworthy': False}
+
         for pattern in self._cleanup_patterns:
             if pattern.get("sender", "").lower() in from_addr and pattern.get("count", 0) >= 3:
                 return {'tier': 'CLEANUP', 'summary': email.get('subject', ''), 'noteworthy': False}

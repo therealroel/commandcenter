@@ -294,23 +294,30 @@ def mark_read(thread_ids):
         }''', thread_ids)
 
         if marked > 0:
-            page.wait_for_timeout(500)
-            # Click Gmail toolbar "Mark as read" button
+            page.wait_for_timeout(800)
+            read_clicked = False
             try:
                 btn = page.query_selector('[data-tooltip="Mark as read"], [aria-label="Mark as read"]')
                 if btn:
                     btn.click()
+                    read_clicked = True
                 else:
-                    # Fallback: open More actions menu and click Mark as read
                     more = page.query_selector('[data-tooltip="More"], [aria-label="More"]')
                     if more:
                         more.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(400)
                         read_item = page.query_selector('[id$=":4"], [data-action-id="11"]')
                         if read_item:
                             read_item.click()
+                            read_clicked = True
             except Exception:
                 pass
+            if not read_clicked:
+                # Gmail keyboard shortcut: I = mark as read
+                try:
+                    page.keyboard.press('I')
+                except Exception:
+                    pass
             page.wait_for_timeout(600)
 
         return {"ok": True, "marked": marked}
@@ -376,6 +383,140 @@ def fetch_email_body(url_fragment):
     return {"ok": True, "body": body or "(could not extract body)"}
 
 
+def setup_gmail_labels():
+    """Create GCP and AWS labels in Gmail and set up filters via Gmail REST API."""
+    from playwright.sync_api import sync_playwright
+
+    ws_url = find_tab('mail.google.com')
+    if not ws_url:
+        return {"ok": False, "error": "no gmail tab"}
+
+    with sync_playwright() as p:
+        browser = p.chromium.connect_over_cdp(CDP_URL)
+        ctx = browser.contexts[0]
+        page = None
+        for pg in ctx.pages:
+            if 'mail.google.com' in pg.url:
+                page = pg
+                break
+        if not page:
+            return {"ok": False, "error": "gmail tab lost"}
+
+        results = []
+
+        # Create labels via Gmail API (user is already authenticated in the browser)
+        labels_result = page.evaluate('''async () => {
+            const created = [];
+            const errors = [];
+
+            // List existing labels
+            let existingLabels = [];
+            try {
+                const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    existingLabels = (data.labels || []).map(l => l.name.toLowerCase());
+                }
+            } catch(e) { errors.push('list: ' + e.message); }
+
+            // Create labels if they don't exist
+            for (const name of ['GCP', 'AWS']) {
+                if (existingLabels.includes(name.toLowerCase())) {
+                    created.push(name + ' (already exists)');
+                    continue;
+                }
+                try {
+                    const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name})
+                    });
+                    if (resp.ok) created.push(name + ' created');
+                    else errors.push(name + ': ' + resp.status + ' ' + await resp.text());
+                } catch(e) { errors.push(name + ': ' + e.message); }
+            }
+
+            return {created, errors};
+        }''')
+
+        results.append(labels_result)
+
+        # Create filters via Gmail API
+        filters_result = page.evaluate('''async () => {
+            const created = [];
+            const errors = [];
+
+            // Get label IDs
+            let gcpId = null, awsId = null;
+            try {
+                const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels');
+                const data = await resp.json();
+                for (const l of (data.labels || [])) {
+                    if (l.name === 'GCP') gcpId = l.id;
+                    if (l.name === 'AWS') awsId = l.id;
+                }
+            } catch(e) { errors.push('get labels: ' + e.message); }
+
+            // Check existing filters
+            let existingFilters = [];
+            try {
+                const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/settings/filters');
+                const data = await resp.json();
+                existingFilters = data.filter || [];
+            } catch(e) {}
+
+            // GCP filter: from devops@bonniernews.se
+            if (gcpId) {
+                const alreadyExists = existingFilters.some(f =>
+                    f.criteria && f.criteria.from && f.criteria.from.includes('devops@bonniernews.se'));
+                if (!alreadyExists) {
+                    try {
+                        const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/settings/filters', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                criteria: {from: 'devops@bonniernews.se'},
+                                action: {addLabelIds: [gcpId], removeLabelIds: ['INBOX']}
+                            })
+                        });
+                        if (resp.ok) created.push('GCP filter created');
+                        else errors.push('GCP filter: ' + resp.status + ' ' + await resp.text());
+                    } catch(e) { errors.push('GCP filter: ' + e.message); }
+                } else {
+                    created.push('GCP filter already exists');
+                }
+            }
+
+            // AWS filter: from amazon.com or amazonaws.com
+            if (awsId) {
+                const alreadyExists = existingFilters.some(f =>
+                    f.criteria && f.criteria.from && f.criteria.from.includes('amazon'));
+                if (!alreadyExists) {
+                    try {
+                        const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/settings/filters', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                criteria: {from: '(amazon.com OR amazonaws.com OR aws.amazon.com)'},
+                                action: {addLabelIds: [awsId], removeLabelIds: ['INBOX']}
+                            })
+                        });
+                        if (resp.ok) created.push('AWS filter created');
+                        else errors.push('AWS filter: ' + resp.status + ' ' + await resp.text());
+                    } catch(e) { errors.push('AWS filter: ' + e.message); }
+                } else {
+                    created.push('AWS filter already exists');
+                }
+            }
+
+            return {created, errors};
+        }''')
+
+        results.append(filters_result)
+
+    return {"ok": True, "results": results}
+
+
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'gmail'
     try:
@@ -393,6 +534,8 @@ if __name__ == '__main__':
         elif cmd == 'fetch_body':
             url_frag = sys.argv[2] if len(sys.argv) > 2 else ''
             result = fetch_email_body(url_frag)
+        elif cmd == 'setup_labels':
+            result = setup_gmail_labels()
         else:
             result = {"error": f"unknown command: {cmd}"}
         print(json.dumps(result))

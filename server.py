@@ -936,7 +936,7 @@ def api_gmail_mark_read():
         result = {"ok": False, "error": str(e)}
     # Update in-memory + disk cache so read state reflects immediately
     if result.get("ok") and _gmail_cache:
-        for tier_key in ("high", "action", "feed", "cleanup"):
+        for tier_key in ("high", "action", "feed", "cleanup", "gcp", "aws", "invite"):
             for email in _gmail_cache.get(tier_key, []):
                 if email.get("id") in ids:
                     email["unread"] = False

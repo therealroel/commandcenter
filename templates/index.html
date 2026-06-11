@@ -606,6 +606,15 @@ body::after {
 .gmail-tab-btn[data-tab="aws"].on .gmail-tab-count { background: rgba(255,153,0,0.22); }
 .gmail-tab-btn[data-tab="aws"].has-items:not(.on) .gmail-tab-count { color: rgba(255,153,0,0.8); background: rgba(255,153,0,0.14); }
 
+@keyframes tab-flash {
+  0%   { background: rgba(255,200,0,0.35); color: var(--yellow); border-color: var(--yellow); }
+  50%  { background: rgba(255,200,0,0.10); }
+  100% { background: rgba(255,200,0,0.35); color: var(--yellow); border-color: var(--yellow); }
+}
+.gmail-tab-btn.new-mail {
+  animation: tab-flash 0.6s ease-in-out 3;
+}
+
 .gmail-summary {
   font-size: 10px;
   color: var(--text-secondary);
@@ -5279,10 +5288,16 @@ body::after {
       }
     }
 
+    const _prevCounts = {};
+    let _firstRender = true;
     function renderSection(prefix, emails) {
       const countEl = document.getElementById(`${prefix}-count`);
       const bodyEl = document.getElementById(`${prefix}-body`);
       if (!countEl || !bodyEl) return;
+
+      const prev = _prevCounts[prefix] ?? -1;
+      const isNew = !_firstRender && emails.length > prev && prev >= 0;
+      _prevCounts[prefix] = emails.length;
 
       countEl.textContent = emails.length;
       bodyEl.innerHTML = '';
@@ -5290,7 +5305,15 @@ body::after {
       // Mark tab button with has-items for the glow-count styling
       const tier = prefix.replace('gmail-', '');
       const tabBtn = document.querySelector(`.gmail-tab-btn[data-tab="${tier}"]`);
-      if (tabBtn) tabBtn.classList.toggle('has-items', emails.length > 0);
+      if (tabBtn) {
+        tabBtn.classList.toggle('has-items', emails.length > 0);
+        if (isNew) {
+          tabBtn.classList.remove('new-mail');
+          void tabBtn.offsetWidth; // reflow to restart animation
+          tabBtn.classList.add('new-mail');
+          tabBtn.addEventListener('animationend', () => tabBtn.classList.remove('new-mail'), { once: true });
+        }
+      }
 
       if (!emails.length) {
         bodyEl.innerHTML = '<div class="gmail-empty">Nothing here</div>';
@@ -5339,6 +5362,7 @@ body::after {
       renderSection('gmail-action', data.action || []);
       renderSection('gmail-feed', data.feed || []);
       renderSection('gmail-cleanup', data.cleanup || []);
+      _firstRender = false;
 
       // Auto-switch tab to most urgent tier (unless user has picked one)
       if (!userPickedTab) {
