@@ -20,9 +20,9 @@
   --border: #1f2a3a;
   --border-bright: #2a3a52;
   --grid: rgba(0, 217, 255, 0.04);
-  --text-primary: #d8e4f0;
-  --text-secondary: #b8d2e8;
-  --text-dim: #8aaec8;
+  --text-primary: #f0f6fc;
+  --text-secondary: #d0e8f8;
+  --text-dim: #a8c8e0;
   --cyan: #00d9ff;
   --cyan-dim: #0090ad;
   --green: #00ff88;
@@ -77,14 +77,14 @@ body::before {
   pointer-events: none;
   z-index: 9998;
   mix-blend-mode: multiply;
-  opacity: 0.45;
+  opacity: 0.22;
 }
 
 body::after {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.5) 100%);
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.25) 100%);
   pointer-events: none;
   z-index: 9997;
 }
