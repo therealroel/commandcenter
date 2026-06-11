@@ -5221,7 +5221,7 @@ body::after {
           <span class="gmail-subject">${escapeHtml(email.subject)}</span>
           <div class="gmail-card-actions">
             ${email.url ? `<a class="gmail-open-link" href="https://mail.google.com${escapeHtml(email.url)}" target="_blank" rel="noopener" title="Open in Gmail">OPEN</a>` : ''}
-            <button class="gmail-card-read" data-email-id="${escapeHtml(email.id)}" title="Mark as read">✓ READ</button>
+            ${email.unread ? `<button class="gmail-card-read" data-email-id="${escapeHtml(email.id)}" title="Mark as read">✓ READ</button>` : ''}
             <button class="gmail-delete-btn" data-email-id="${escapeHtml(email.id)}" data-sender="${escapeHtml(email.from)}" title="Delete">✕</button>
           </div>
         </div>
@@ -5237,21 +5237,26 @@ body::after {
         </div>
       `;
 
-      card.querySelector('.gmail-card-read').addEventListener('click', function(e) {
-        e.stopPropagation();
-        e.preventDefault();
-        const readBtn = e.currentTarget;
-        readBtn.textContent = '…';
-        readBtn.disabled = true;
+      function doMarkRead() {
+        if (!card.classList.contains('unread')) return;
+        card.classList.remove('unread');
+        const readBtn = card.querySelector('.gmail-card-read');
+        if (readBtn) readBtn.remove();
         fetch('/api/gmail/mark-read', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids: [email.id] })
-        }).then(() => {
-          card.classList.remove('unread');
-          readBtn.textContent = '✓';
-        }).catch(() => { readBtn.textContent = 'ERR'; });
-      });
+        }).catch(() => {});
+      }
+
+      const readBtn = card.querySelector('.gmail-card-read');
+      if (readBtn) {
+        readBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          e.preventDefault();
+          doMarkRead();
+        });
+      }
 
       card.querySelector('.gmail-delete-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -5268,10 +5273,12 @@ body::after {
         }).catch(() => {});
       });
 
-      // Click card body to expand/collapse (but not when clicking action buttons)
+      // Click card body to expand/collapse; auto-mark as read on expand
       card.addEventListener('click', function(e) {
         if (e.target.closest('.gmail-card-actions') || e.target.closest('.gmail-cleanup-check')) return;
+        const expanding = !card.classList.contains('expanded');
         card.classList.toggle('expanded');
+        if (expanding) doMarkRead();
       });
 
       return card;
