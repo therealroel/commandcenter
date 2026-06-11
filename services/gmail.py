@@ -137,7 +137,7 @@ class GmailService:
 
         n = len(emails)
         _st(f"classifying {n} email{'s' if n != 1 else ''}...")
-        classifications = self._classify_batch(emails)
+        classifications = [self._classify_rules(e) for e in emails]
         
         for i, email in enumerate(emails):
             email_id = email["id"]
