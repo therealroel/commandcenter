@@ -255,7 +255,7 @@ Key: If recipients show "me" that's Thomas in To field. If it shows only other n
         return all_results
     
     def _classify_rules(self, email):
-        """Fallback rule-based classification."""
+        """Rule-based classification — ordered from most specific to least."""
         from_addr = (email.get("from") or "").lower()
         from_name = (email.get("from_name") or "").lower()
         subject = (email.get("subject") or "").lower()
@@ -277,13 +277,25 @@ Key: If recipients show "me" that's Thomas in To field. If it shows only other n
         if any(subject.startswith(s) for s in invite_subjects) or any(s in from_addr for s in invite_senders):
             return {'tier': 'INVITE', 'summary': email.get('subject', ''), 'noteworthy': True}
 
+        # UptimeRobot: DOWN = HIGH alert, everything else (UP/recovered) = CLEANUP
         if 'uptimerobot' in from_addr or 'uptimerobot' in subject:
+            if 'is down' in subject or 'down:' in subject:
+                return {'tier': 'HIGH', 'summary': email.get('subject', ''), 'noteworthy': True}
             return {'tier': 'CLEANUP', 'summary': email.get('subject', ''), 'noteworthy': False}
+
+        # BorOps / CloudWatch production alarms → HIGH
+        if ('borops' in from_addr or 'borops' in from_name or
+                subject.startswith('alarm:') or 'cloudwatch' in subject):
+            return {'tier': 'HIGH', 'summary': email.get('subject', ''), 'noteworthy': True}
+
+        # IT support tickets (Freshservice, Freshdesk) — must be before noreply catch
+        if 'freshservice' in from_addr or 'freshdesk' in from_addr:
+            return {'tier': 'ACTION', 'summary': email.get('subject', ''), 'noteworthy': True}
 
         for pattern in self._cleanup_patterns:
             if pattern.get("sender", "").lower() in from_addr and pattern.get("count", 0) >= 3:
                 return {'tier': 'CLEANUP', 'summary': email.get('subject', ''), 'noteworthy': False}
-        
+
         known_noise = [
             "newsletter", "digest", "noreply", "no-reply", "notifications",
             "hello@", "welcome@", "team@ship.", "notice@email.",
@@ -292,7 +304,16 @@ Key: If recipients show "me" that's Thomas in To field. If it shows only other n
         for pattern in known_noise:
             if pattern in from_addr:
                 return {'tier': 'FEED', 'summary': email.get('subject', ''), 'noteworthy': False}
-        
+
+        # Newsletter/digest senders identified by name or domain
+        newsletter_names = [
+            "borsen", "børsen", "morgenbrief", "advisorbrief", "forsikringsbrief",
+            "finans.dk", "berlingske", "politiken", "epaper",
+        ]
+        for ns in newsletter_names:
+            if ns in from_addr or ns in from_name:
+                return {'tier': 'FEED', 'summary': email.get('subject', ''), 'noteworthy': False}
+
         return {'tier': 'ACTION', 'summary': email.get('subject', ''), 'noteworthy': False}
     
     def delete_emails(self, email_ids):
