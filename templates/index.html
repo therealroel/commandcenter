@@ -5425,6 +5425,27 @@ body::after {
       });
     });
 
+    function parseEventMinutes(timeStr) {
+      if (!timeStr || timeStr === 'All day') return null;
+      const m = timeStr.match(/(\d{1,2}):(\d{2})/);
+      return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+    }
+
+    function makeCalEventEl(ev) {
+      const el = document.createElement('div');
+      el.className = 'cal-event' + (!ev.time || ev.time === 'All day' ? ' all-day' : '');
+      const barColor = ev.color || 'var(--cyan)';
+      el.innerHTML = `
+        <div class="cal-event-bar" style="background:${barColor}"></div>
+        <div class="cal-event-info">
+          <span class="cal-event-title">${escapeHtml(ev.title)}</span>
+          ${ev.time ? `<span class="cal-event-time">${escapeHtml(ev.time)}</span>` : ''}
+          ${ev.location ? `<span class="cal-event-location">${escapeHtml(ev.location)}</span>` : ''}
+        </div>
+      `;
+      return el;
+    }
+
     function renderCalendar(data) {
       const body = document.getElementById('cal-body');
       const dateEl = document.getElementById('cal-date');
@@ -5445,27 +5466,35 @@ body::after {
         return;
       }
       body.innerHTML = '';
-      events.forEach(ev => {
-        const el = document.createElement('div');
-        el.className = 'cal-event' + (ev.time === 'All day' ? ' all-day' : '');
-        const barColor = ev.color || 'var(--cyan)';
-        el.innerHTML = `
-          <div class="cal-event-bar" style="background:${barColor}"></div>
-          <div class="cal-event-info">
-            <span class="cal-event-title">${escapeHtml(ev.title)}</span>
-            ${ev.time ? `<span class="cal-event-time">${escapeHtml(ev.time)}</span>` : ''}
-            ${ev.location ? `<span class="cal-event-location">${escapeHtml(ev.location)}</span>` : ''}
-          </div>
-        `;
-        body.appendChild(el);
-      });
-      // Current time line — only for today's view
+
+      // All-day events at top, timed events sorted by start time
+      const allDay = events.filter(ev => !ev.time || ev.time === 'All day');
+      const timed = events.filter(ev => ev.time && ev.time !== 'All day')
+        .sort((a, b) => (parseEventMinutes(a.time) || 0) - (parseEventMinutes(b.time) || 0));
+
+      allDay.forEach(ev => body.appendChild(makeCalEventEl(ev)));
+
       if (currentCalDay === 0) {
+        // Insert now-line between timed events at the correct time position
         const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+        const timeStr = now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', hour12: false});
         const timeLine = document.createElement('div');
         timeLine.className = 'cal-now-line';
-        timeLine.innerHTML = `<span class="cal-now-time">${now.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false})}</span>`;
-        body.insertBefore(timeLine, body.firstChild);
+        timeLine.innerHTML = `<span class="cal-now-time">${timeStr}</span>`;
+
+        let inserted = false;
+        timed.forEach(ev => {
+          const evMins = parseEventMinutes(ev.time);
+          if (!inserted && evMins !== null && nowMins <= evMins) {
+            body.appendChild(timeLine);
+            inserted = true;
+          }
+          body.appendChild(makeCalEventEl(ev));
+        });
+        if (!inserted) body.appendChild(timeLine);
+      } else {
+        timed.forEach(ev => body.appendChild(makeCalEventEl(ev)));
       }
     }
 
