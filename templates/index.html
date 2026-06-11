@@ -622,6 +622,14 @@ body::after {
   margin-left: auto;
   white-space: nowrap;
 }
+.gmail-summary .s-high   { color: var(--red);    font-weight: 700; }
+.gmail-summary .s-action { color: var(--yellow);  font-weight: 700; }
+.gmail-summary .s-gcp    { color: var(--cyan-dim);}
+.gmail-summary .s-aws    { color: var(--orange);  }
+.gmail-summary .s-other  { color: var(--text-dim);}
+.gmail-summary .s-sep    { color: var(--border-bright); }
+/* Hide summary when expanded — tabs already show counts */
+.gmail-dock:not(.collapsed) .gmail-summary { display: none; }
 
 .gmail-login-btn {
   font-size: 9px;
@@ -5366,10 +5374,25 @@ body::after {
         return;
       }
 
-      const hasHigh = (data.high || []).length > 0;
-      const hasAction = (data.action || []).length > 0;
+      const h  = (data.high   || []).length;
+      const a  = (data.action || []).length;
+      const g  = (data.gcp    || []).length;
+      const aw = (data.aws    || []).length;
+      const inv= (data.invite || []).length;
+      const f  = (data.feed   || []).length;
+      const c  = (data.cleanup|| []).length;
+      const hasHigh = h > 0, hasAction = a > 0;
       dot.className = hasHigh ? 'dot alert' : (hasAction ? 'dot warn' : 'dot');
-      summary.textContent = data.summary || 'inbox clear';
+      const sp = '<span class="s-sep"> · </span>';
+      const parts = [];
+      if (h)   parts.push(`<span class="s-high">${h} HIGH</span>`);
+      if (a)   parts.push(`<span class="s-action">${a} ACTION</span>`);
+      if (aw)  parts.push(`<span class="s-aws">${aw} AWS</span>`);
+      if (g)   parts.push(`<span class="s-gcp">${g} GCP</span>`);
+      if (inv) parts.push(`<span class="s-other">${inv} INVITE</span>`);
+      if (f)   parts.push(`<span class="s-other">${f} FEED</span>`);
+      if (c)   parts.push(`<span class="s-other">${c} CLEANUP</span>`);
+      summary.innerHTML = parts.length ? parts.join(sp) : '<span class="s-other">inbox clear</span>';
 
       renderSection('gmail-gcp', data.gcp || []);
       renderSection('gmail-aws', data.aws || []);
